@@ -37,7 +37,7 @@ func _ready() -> void:
 	box.add_child(weapon_label)
 	guide_label = Label.new()
 	guide_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	guide_label.text = "指南：WASD / 方向键移动；保持同步率，拾取绿色掉落加分；敌人越深红越危险，30 秒后撤离，击杀精英会自动收集并提前撤离。"
+	guide_label.text = "指南：WASD / 方向键移动；保持同步率，拾取绿色掉落加分；30 秒后撤离，击杀精英会自动收集并提前撤离。"
 	box.add_child(guide_label)
 	elite_label = Label.new()
 	elite_label.text = "精英血量"
