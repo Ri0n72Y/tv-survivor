@@ -166,7 +166,7 @@ func _on_cell_clicked(pos: Vector2i) -> void:
 func _can_enter(pos: Vector2i) -> bool:
 	if not _is_inside(pos):
 		return false
-	var distance := abs(pos.x - RunState.player_grid_pos.x) + abs(pos.y - RunState.player_grid_pos.y)
+	var distance: int = abs(pos.x - RunState.player_grid_pos.x) + abs(pos.y - RunState.player_grid_pos.y)
 	if distance != 1:
 		return false
 	var cell: Dictionary = RunState.grid_data[pos.y][pos.x]
