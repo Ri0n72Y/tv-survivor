@@ -12,19 +12,32 @@ var speed: float = Constants.SMALL_ENEMY_SPEED
 var damage: float = Constants.SMALL_ENEMY_DAMAGE
 var player: Node2D
 var contact_timer := 0.0
+var overlapping_player := false
 var radius := 10.0
 
 func setup(target_player: Node2D) -> void:
 	player = target_player
 
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+
 func _process(delta: float) -> void:
 	contact_timer = maxf(0.0, contact_timer - delta)
 	if is_instance_valid(player):
 		global_position += global_position.direction_to(player.global_position) * speed * delta
-		if global_position.distance_to(player.global_position) <= radius + 14.0 and contact_timer <= 0.0:
+		if overlapping_player and contact_timer <= 0.0:
 			contact_timer = Constants.ENEMY_CONTACT_COOLDOWN
 			damaged_player.emit(damage)
 	queue_redraw()
+
+func _on_body_entered(body: Node2D) -> void:
+	if body == player:
+		overlapping_player = true
+
+func _on_body_exited(body: Node2D) -> void:
+	if body == player:
+		overlapping_player = false
 
 func apply_difficulty(level: int) -> void:
 	var safe_level := maxi(0, level)

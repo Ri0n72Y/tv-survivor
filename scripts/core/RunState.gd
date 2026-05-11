@@ -15,7 +15,7 @@ var total_score: int = 0
 
 var weapons := {
 	"aura": 0,
-	"projectile": 0,
+	"projectile": 1,
 	"shape": 0,
 }
 
@@ -28,7 +28,7 @@ func reset_run() -> void:
 	total_score = 0
 	weapons = {
 		"aura": 0,
-		"projectile": 0,
+		"projectile": 1,
 		"shape": 0,
 	}
 	grid_data = []
