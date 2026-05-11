@@ -22,7 +22,7 @@ var task_time_left := Constants.TASK_DURATION
 var extraction_time_left := Constants.EXTRACTION_COUNTDOWN
 var extraction_active := false
 var finished := false
-var difficulty_level := 0
+var difficulty_stage := 0
 
 func _ready() -> void:
 	_build_scene()
@@ -79,12 +79,10 @@ func _build_scene() -> void:
 
 func _update_difficulty() -> void:
 	var elapsed := Constants.TASK_DURATION - task_time_left
-	var time_level := int(floor(elapsed / Constants.DIFFICULTY_STEP_SECONDS))
-	var weapon_level_sum := _get_weapon_level_sum()
-	var next_level := time_level + weapon_level_sum
-	if next_level != difficulty_level:
-		difficulty_level = next_level
-		spawner.set_difficulty(difficulty_level)
+	var next_stage := int(floor(elapsed / Constants.DIFFICULTY_STEP_SECONDS))
+	if next_stage != difficulty_stage:
+		difficulty_stage = next_stage
+	spawner.set_difficulty(difficulty_stage, _get_weapon_level_sum())
 
 func _get_weapon_level_sum() -> int:
 	return int(RunState.weapons["aura"]) + int(RunState.weapons["projectile"]) + int(RunState.weapons["shape"])
@@ -103,7 +101,7 @@ func _update_hud() -> void:
 		if is_instance_valid(enemy) and enemy is EliteEnemy:
 			elite_ratio = enemy.get_hp_ratio()
 			break
-	var phase_text := "撤离倒计时：%.1f" % extraction_time_left if extraction_active else "任务剩余：%.1f  难度：%d（武器等级和：%d）" % [task_time_left, difficulty_level, _get_weapon_level_sum()]
+	var phase_text := "撤离倒计时：%.1f" % extraction_time_left if extraction_active else "任务剩余：%.1f  难度阶段：%d（武器等级和：%d）" % [task_time_left, difficulty_stage, _get_weapon_level_sum()]
 	if hud.has_method("update_hud"):
 		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, phase_text, RunState.weapons, elite_ratio, RunState.total_score)
 

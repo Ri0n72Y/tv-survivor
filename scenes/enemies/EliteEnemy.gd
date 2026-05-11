@@ -12,6 +12,7 @@ var speed: float = Constants.ELITE_SPEED
 var damage: float = Constants.ELITE_DAMAGE
 var player: Node2D
 var contact_timer := 0.0
+var difficulty_tier := 0
 var overlapping_player := false
 var radius := 22.0
 
@@ -39,10 +40,10 @@ func _on_body_exited(body: Node2D) -> void:
 	if body == player:
 		overlapping_player = false
 
-func apply_difficulty(level: int) -> void:
-	var safe_level := maxi(0, level)
-	var hp_multiplier := 1.0 + float(safe_level) * Constants.ENEMY_DIFFICULTY_HP_MULTIPLIER
-	var speed_multiplier := 1.0 + float(safe_level) * Constants.ENEMY_DIFFICULTY_SPEED_MULTIPLIER
+func configure_spawn_tier(level: int) -> void:
+	difficulty_tier = maxi(0, level)
+	var hp_multiplier := 1.0 + float(difficulty_tier) * Constants.ENEMY_DIFFICULTY_HP_MULTIPLIER
+	var speed_multiplier := 1.0 + float(difficulty_tier) * Constants.ENEMY_DIFFICULTY_SPEED_MULTIPLIER
 	max_hp *= hp_multiplier
 	hp = max_hp
 	speed *= speed_multiplier
@@ -57,8 +58,11 @@ func get_hp_ratio() -> float:
 	return clampf(hp / max_hp, 0.0, 1.0)
 
 func _draw() -> void:
-	draw_circle(Vector2.ZERO, radius, Color(0.78, 0.12, 0.46))
+	draw_circle(Vector2.ZERO, radius, _get_body_color())
 	var bar_back := Rect2(Vector2(-28, -38), Vector2(56, 6))
 	draw_rect(bar_back, Color(0.12, 0.02, 0.06), true)
 	draw_rect(Rect2(bar_back.position, Vector2(bar_back.size.x * get_hp_ratio(), bar_back.size.y)), Color(0.95, 0.25, 0.7), true)
 	draw_rect(bar_back, Color.WHITE, false, 1.0)
+
+func _get_body_color() -> Color:
+	return Color(0.36, 0.0, 0.0).lerp(Color(0.18, 0.0, 0.0), clampf(float(difficulty_tier - 2) / 2.0, 0.0, 1.0))

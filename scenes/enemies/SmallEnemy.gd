@@ -12,6 +12,7 @@ var speed: float = Constants.SMALL_ENEMY_SPEED
 var damage: float = Constants.SMALL_ENEMY_DAMAGE
 var player: Node2D
 var contact_timer := 0.0
+var difficulty_tier := 0
 var overlapping_player := false
 var radius := 10.0
 
@@ -39,10 +40,10 @@ func _on_body_exited(body: Node2D) -> void:
 	if body == player:
 		overlapping_player = false
 
-func apply_difficulty(level: int) -> void:
-	var safe_level := maxi(0, level)
-	var hp_multiplier := 1.0 + float(safe_level) * Constants.ENEMY_DIFFICULTY_HP_MULTIPLIER
-	var speed_multiplier := 1.0 + float(safe_level) * Constants.ENEMY_DIFFICULTY_SPEED_MULTIPLIER
+func configure_spawn_tier(level: int) -> void:
+	difficulty_tier = maxi(0, level)
+	var hp_multiplier := 1.0 + float(difficulty_tier) * Constants.ENEMY_DIFFICULTY_HP_MULTIPLIER
+	var speed_multiplier := 1.0 + float(difficulty_tier) * Constants.ENEMY_DIFFICULTY_SPEED_MULTIPLIER
 	max_hp *= hp_multiplier
 	hp = max_hp
 	speed *= speed_multiplier
@@ -54,4 +55,7 @@ func take_damage(amount: float) -> void:
 		queue_free()
 
 func _draw() -> void:
-	draw_circle(Vector2.ZERO, radius, Color(1.0, 0.28, 0.08))
+	draw_circle(Vector2.ZERO, radius, _get_body_color())
+
+func _get_body_color() -> Color:
+	return Color(1.0, 0.45, 0.32).lerp(Color(0.55, 0.0, 0.0), clampf(float(difficulty_tier) / 2.0, 0.0, 1.0))

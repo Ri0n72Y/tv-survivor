@@ -27,6 +27,8 @@ func _show_battle() -> void:
 	battle_scene.restart_requested.connect(_restart_run)
 
 func _on_battle_finished(success: bool, final_sync_rate: float) -> void:
+	if not success:
+		RunState.player_grid_pos = RunState.previous_grid_pos
 	_show_grid()
 	if grid_scene.has_method("handle_battle_result"):
 		grid_scene.handle_battle_result(success, final_sync_rate)
