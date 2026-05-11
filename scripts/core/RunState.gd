@@ -11,6 +11,7 @@ var completed_tasks: int = 0
 var total_tasks: int = 3
 
 var next_battle_initial_sync: float = 100.0
+var total_score: int = 0
 
 var weapons := {
 	"aura": 0,
@@ -24,6 +25,7 @@ func reset_run() -> void:
 	completed_tasks = 0
 	total_tasks = 3
 	next_battle_initial_sync = 100.0
+	total_score = 0
 	weapons = {
 		"aura": 0,
 		"projectile": 0,

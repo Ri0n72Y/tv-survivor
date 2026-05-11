@@ -26,6 +26,14 @@ func _process(delta: float) -> void:
 			damaged_player.emit(damage)
 	queue_redraw()
 
+func apply_difficulty(level: int) -> void:
+	var safe_level := maxi(0, level)
+	var hp_multiplier := 1.0 + float(safe_level) * Constants.ENEMY_DIFFICULTY_HP_MULTIPLIER
+	var speed_multiplier := 1.0 + float(safe_level) * Constants.ENEMY_DIFFICULTY_SPEED_MULTIPLIER
+	max_hp *= hp_multiplier
+	hp = max_hp
+	speed *= speed_multiplier
+
 func take_damage(amount: float) -> void:
 	hp -= amount
 	if hp <= 0.0:
