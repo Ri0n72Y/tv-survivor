@@ -16,6 +16,7 @@ var small_timer := 0.0
 var elite_spawned := false
 var running := false
 var rng := RandomNumberGenerator.new()
+var difficulty_level := 0
 
 func setup(target_player: Node2D, parent: Node, signal_center: Vector2, signal_radius: float) -> void:
 	player = target_player
@@ -33,12 +34,16 @@ func start() -> void:
 func stop() -> void:
 	running = false
 
+func set_difficulty(level: int) -> void:
+	difficulty_level = maxi(0, level)
+
 func _process(delta: float) -> void:
 	if not running:
 		return
 	elapsed += delta
 	small_timer += delta
-	if small_timer >= Constants.SMALL_ENEMY_SPAWN_INTERVAL:
+	var spawn_interval: float = maxf(Constants.SMALL_ENEMY_MIN_SPAWN_INTERVAL, Constants.SMALL_ENEMY_SPAWN_INTERVAL - float(difficulty_level) * 0.15)
+	if small_timer >= spawn_interval:
 		small_timer = 0.0
 		_spawn(SMALL_ENEMY_SCENE)
 	if not elite_spawned and elapsed >= Constants.ELITE_SPAWN_TIME:
@@ -53,4 +58,6 @@ func _spawn(scene: PackedScene) -> void:
 	enemy.global_position = center + Vector2(cos(angle), sin(angle)) * radius
 	spawn_parent.add_child(enemy)
 	enemy.setup(player)
+	if enemy.has_method("apply_difficulty"):
+		enemy.apply_difficulty(difficulty_level)
 	enemy_spawned.emit(enemy)

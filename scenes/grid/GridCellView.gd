@@ -1,14 +1,12 @@
 extends Control
 
-signal cell_clicked(cell_pos: Vector2i)
-
 var cell_data: Dictionary = {}
 var cell_pos: Vector2i = Vector2i.ZERO
 var is_player_here := false
 var mark_label: Label
 
 func _ready() -> void:
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mark_label = Label.new()
 	mark_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mark_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -22,10 +20,6 @@ func setup(data: Dictionary, pos: Vector2i, player_here: bool) -> void:
 	is_player_here = player_here
 	_update_label()
 	queue_redraw()
-
-func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		cell_clicked.emit(cell_pos)
 
 func _draw() -> void:
 	var rect := Rect2(Vector2.ZERO, size)

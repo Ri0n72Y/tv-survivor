@@ -9,6 +9,8 @@ const CELL_SCENE := preload("res://scenes/grid/GridCellView.tscn")
 var title_label: Label
 var progress_label: Label
 var weapon_label: Label
+var score_label: Label
+var guide_label: Label
 var message_label: Label
 var grid_container: GridContainer
 var victory_panel: Panel
@@ -75,8 +77,16 @@ func _build_ui() -> void:
 	weapon_label = Label.new()
 	root.add_child(weapon_label)
 
+	score_label = Label.new()
+	root.add_child(score_label)
+
+	guide_label = Label.new()
+	guide_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	guide_label.text = "操作指南：阵列界面使用 WASD / 方向键移动；只能进入已揭示的相邻非障碍格。主角默认拥有投掷物 Lv.1。进入任务点后，在战斗中移动角色、躲避敌人、收集绿色掉落物获得积分；击杀精英会自动收集全场掉落并触发撤离。R 重新开始。"
+	root.add_child(guide_label)
+
 	message_label = Label.new()
-	message_label.text = "点击已揭示的相邻格移动。"
+	message_label.text = "使用 WASD 或方向键移动到已揭示的相邻格。"
 	root.add_child(message_label)
 
 	grid_container = GridContainer.new()
@@ -117,6 +127,7 @@ func _refresh_all() -> void:
 func _refresh_labels() -> void:
 	progress_label.text = "任务进度：%d/%d" % [RunState.completed_tasks, RunState.total_tasks]
 	weapon_label.text = "当前武器：光环 Lv.%d   投掷物 Lv.%d   固定形状 Lv.%d" % [RunState.weapons["aura"], RunState.weapons["projectile"], RunState.weapons["shape"]]
+	score_label.text = "总分：%d" % RunState.total_score
 
 func _refresh_grid() -> void:
 	for child in grid_container.get_children():
@@ -127,7 +138,6 @@ func _refresh_grid() -> void:
 			var pos := Vector2i(x, y)
 			var view := CELL_SCENE.instantiate()
 			grid_container.add_child(view)
-			view.cell_clicked.connect(_on_cell_clicked)
 			view.setup(RunState.grid_data[y][x], pos, pos == RunState.player_grid_pos)
 			cells.append(view)
 
@@ -139,11 +149,31 @@ func _refresh_victory() -> void:
 		var detail := victory_panel.get_node("VictoryBox/VictoryDetail") as Label
 		detail.text = "你完成了 3 个任务点。构筑：光环 Lv.%d / 投掷物 Lv.%d / 固定形状 Lv.%d" % [RunState.weapons["aura"], RunState.weapons["projectile"], RunState.weapons["shape"]]
 
-func _on_cell_clicked(pos: Vector2i) -> void:
+func _input(event: InputEvent) -> void:
+	if RunState.completed_tasks >= RunState.total_tasks:
+		return
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var direction := Vector2i.ZERO
+	match event.keycode:
+		KEY_W, KEY_UP:
+			direction = Vector2i.UP
+		KEY_S, KEY_DOWN:
+			direction = Vector2i.DOWN
+		KEY_A, KEY_LEFT:
+			direction = Vector2i.LEFT
+		KEY_D, KEY_RIGHT:
+			direction = Vector2i.RIGHT
+		_:
+			return
+	get_viewport().set_input_as_handled()
+	_try_enter_cell(RunState.player_grid_pos + direction)
+
+func _try_enter_cell(pos: Vector2i) -> void:
 	if RunState.completed_tasks >= RunState.total_tasks:
 		return
 	if not _can_enter(pos):
-		message_label.text = "只能进入已揭示、相邻、非障碍格。"
+		message_label.text = "只能用键盘进入已揭示、相邻、非障碍格。"
 		return
 	RunState.previous_grid_pos = RunState.player_grid_pos
 	RunState.player_grid_pos = pos
