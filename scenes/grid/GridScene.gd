@@ -82,7 +82,7 @@ func _build_ui() -> void:
 
 	guide_label = Label.new()
 	guide_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	guide_label.text = "操作指南：阵列界面使用 WASD / 方向键移动；只能进入已揭示的相邻非障碍格。主角默认拥有投掷物 Lv.1。进入任务点后，在战斗中移动角色、躲避敌人、收集绿色掉落物获得积分；击杀精英会自动收集全场掉落并触发撤离。R 重新开始。"
+	guide_label.text = "操作指南：阵列界面使用 WASD / 方向键移动；只能进入已揭示的相邻非障碍格。\n进入任务点后，移动角色、躲避敌人、收集绿色掉落物获得积分。R 重新开始。"
 	root.add_child(guide_label)
 
 	message_label = Label.new()
