@@ -8,6 +8,7 @@ const SIGNAL_AREA_SCENE := preload("res://scenes/battle/SignalArea.tscn")
 const PLAYER_SCENE := preload("res://scenes/battle/PlayerAvatar.tscn")
 const HUD_SCENE := preload("res://scenes/ui/BattleHud.tscn")
 const WEAPON_MANAGER_SCENE := preload("res://scenes/weapons/WeaponManager.tscn")
+const COLLECTIBLE_DROP_SCENE := preload("res://scenes/battle/CollectibleDrop.gd")
 
 var signal_center := Vector2(640, 360)
 var player: PlayerAvatar
@@ -16,13 +17,19 @@ var sync_controller := SyncController.new()
 var spawner: EnemySpawner
 var weapon_manager: WeaponManager
 var enemies: Array = []
-var remaining_time := Constants.BATTLE_DURATION
+var drops: Array = []
+var task_time_left := Constants.TASK_DURATION
+var extraction_time_left := Constants.EXTRACTION_COUNTDOWN
+var extraction_active := false
 var finished := false
+var difficulty_stage := 0
 
 func _ready() -> void:
 	_build_scene()
 	sync_controller.setup(RunState.next_battle_initial_sync)
+	_update_difficulty()
 	spawner.start()
+	_update_hud()
 
 func _process(delta: float) -> void:
 	if finished:
@@ -34,13 +41,19 @@ func _process(delta: float) -> void:
 		# Debug-only escape hatch for fast editor iteration; not part of formal win/loss flow.
 		_finish(false)
 		return
-	remaining_time = maxf(0.0, remaining_time - delta)
 	_update_sync(delta)
+	if extraction_active:
+		extraction_time_left = maxf(0.0, extraction_time_left - delta)
+		if extraction_time_left <= 0.0:
+			_finish(true)
+	else:
+		task_time_left = maxf(0.0, task_time_left - delta)
+		_update_difficulty()
+		if task_time_left <= 0.0:
+			_start_extraction()
 	_update_hud()
 	if sync_controller.sync_rate <= 0.0:
 		_finish(false)
-	elif remaining_time <= 0.0:
-		_finish(true)
 
 func _build_scene() -> void:
 	var background := ColorRect.new()
@@ -64,6 +77,16 @@ func _build_scene() -> void:
 	hud = HUD_SCENE.instantiate()
 	add_child(hud)
 
+func _update_difficulty() -> void:
+	var elapsed := Constants.TASK_DURATION - task_time_left
+	var next_stage := int(floor(elapsed / Constants.DIFFICULTY_STEP_SECONDS))
+	if next_stage != difficulty_stage:
+		difficulty_stage = next_stage
+	spawner.set_difficulty(difficulty_stage, _get_weapon_level_sum())
+
+func _get_weapon_level_sum() -> int:
+	return int(RunState.weapons["aura"]) + int(RunState.weapons["projectile"]) + int(RunState.weapons["shape"])
+
 func _update_sync(delta: float) -> void:
 	var distance := player.global_position.distance_to(signal_center)
 	sync_controller.update(delta, distance)
@@ -78,8 +101,9 @@ func _update_hud() -> void:
 		if is_instance_valid(enemy) and enemy is EliteEnemy:
 			elite_ratio = enemy.get_hp_ratio()
 			break
+	var phase_text := "撤离倒计时：%.1f" % extraction_time_left if extraction_active else "任务剩余：%.1f  难度阶段：%d（武器等级和：%d）" % [task_time_left, difficulty_stage, _get_weapon_level_sum()]
 	if hud.has_method("update_hud"):
-		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, remaining_time, RunState.weapons, elite_ratio)
+		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, phase_text, RunState.weapons, elite_ratio, RunState.total_score)
 
 func _on_enemy_spawned(enemy: Node) -> void:
 	enemies.append(enemy)
@@ -87,7 +111,37 @@ func _on_enemy_spawned(enemy: Node) -> void:
 	enemy.damaged_player.connect(_on_player_damaged)
 
 func _on_enemy_died(enemy: Node) -> void:
+	var is_elite := enemy is EliteEnemy
+	RunState.total_score += Constants.SCORE_ELITE_KILL if is_elite else Constants.SCORE_SMALL_KILL
+	_spawn_drop(enemy.global_position, Constants.SCORE_ELITE_DROP if is_elite else Constants.SCORE_SMALL_DROP)
 	enemies.erase(enemy)
+	if is_elite:
+		_collect_all_drops()
+		_start_extraction()
+
+func _spawn_drop(drop_position: Vector2, points: int) -> void:
+	var drop := COLLECTIBLE_DROP_SCENE.new()
+	drop.global_position = drop_position
+	add_child(drop)
+	drop.setup(points, player)
+	drop.collected.connect(_on_drop_collected)
+	drops.append(drop)
+
+func _on_drop_collected(drop: Node, points: int) -> void:
+	drops.erase(drop)
+	RunState.total_score += points
+
+func _collect_all_drops() -> void:
+	for drop in drops.duplicate():
+		if is_instance_valid(drop) and drop.has_method("collect"):
+			drop.collect()
+
+func _start_extraction() -> void:
+	if extraction_active:
+		return
+	extraction_active = true
+	extraction_time_left = Constants.EXTRACTION_COUNTDOWN
+	spawner.stop()
 
 func _on_player_damaged(amount: float) -> void:
 	sync_controller.apply_damage(amount)
