@@ -15,15 +15,19 @@ func get_enemies() -> Array:
 	return []
 
 func _start_weapons() -> void:
-	if int(RunState.weapons["aura"]) > 0:
+	if RunState.get_weapon_level("aura") > 0:
 		var aura := AuraWeapon.new()
 		add_child(aura)
-		aura.setup(player, Callable(self, "get_enemies"), int(RunState.weapons["aura"]))
-	if int(RunState.weapons["projectile"]) > 0:
+		aura.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("aura"))
+	if RunState.get_weapon_level("projectile") > 0:
 		var projectile := ProjectileWeapon.new()
 		add_child(projectile)
-		projectile.setup(player, Callable(self, "get_enemies"), int(RunState.weapons["projectile"]))
-	if int(RunState.weapons["shape"]) > 0:
+		projectile.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("projectile"))
+	if RunState.get_weapon_level("shape") > 0:
 		var shape := ShapeWeapon.new()
 		add_child(shape)
-		shape.setup(player, Callable(self, "get_enemies"), int(RunState.weapons["shape"]))
+		shape.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("shape"))
+	if RunState.get_weapon_level("beam") > 0:
+		var beam := BeamWeapon.new()
+		add_child(beam)
+		beam.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("beam"))

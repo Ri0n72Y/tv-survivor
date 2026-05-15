@@ -6,6 +6,7 @@ signal enemy_spawned(enemy: Node)
 const Constants = preload("res://scripts/core/Constants.gd")
 const SMALL_ENEMY_SCENE := preload("res://scenes/enemies/SmallEnemy.tscn")
 const ELITE_ENEMY_SCENE := preload("res://scenes/enemies/EliteEnemy.tscn")
+const BOSS_ENEMY_SCENE := preload("res://scenes/enemies/BossEnemy.tscn")
 
 var center := Vector2(640, 360)
 var radius := Constants.SIGNAL_RADIUS
@@ -18,6 +19,7 @@ var running := false
 var rng := RandomNumberGenerator.new()
 var difficulty_stage := 0
 var weapon_level_sum := 0
+var room_type := "task"
 
 func setup(target_player: Node2D, parent: Node, signal_center: Vector2, signal_radius: float) -> void:
 	player = target_player
@@ -31,22 +33,26 @@ func start() -> void:
 	elapsed = 0.0
 	small_timer = 0.0
 	elite_spawned = false
+	_spawn_initial_room_enemy()
 
 func stop() -> void:
 	running = false
 
 func set_difficulty(stage: int, weapon_sum: int) -> void:
-	var previous_stage := difficulty_stage
 	difficulty_stage = maxi(0, stage)
 	weapon_level_sum = maxi(0, weapon_sum)
-	if running and not elite_spawned and previous_stage < 2 and difficulty_stage >= 2:
-		elite_spawned = true
-		_spawn(ELITE_ENEMY_SCENE, 2)
+
+func set_room_type(value: String) -> void:
+	room_type = value
+
 
 func _process(delta: float) -> void:
 	if not running:
 		return
 	elapsed += delta
+	if room_type == "task" and not elite_spawned and elapsed >= Constants.ELITE_SPAWN_TIME:
+		elite_spawned = true
+		_spawn(ELITE_ENEMY_SCENE, 2)
 	small_timer += delta
 	var spawn_interval := Constants.SMALL_ENEMY_SPAWN_INTERVAL / _get_spawn_multiplier()
 	if small_timer >= spawn_interval:
@@ -65,6 +71,15 @@ func _roll_small_enemy_tier() -> int:
 	if difficulty_stage >= 2:
 		chance += 0.25
 	return 1 if rng.randf() < clampf(chance, 0.0, 0.85) else 0
+
+func _spawn_initial_room_enemy() -> void:
+	match room_type:
+		"elite":
+			elite_spawned = true
+			_spawn(ELITE_ENEMY_SCENE, 2)
+		"boss":
+			elite_spawned = true
+			_spawn(BOSS_ENEMY_SCENE, 0)
 
 func _spawn(scene: PackedScene, enemy_tier: int) -> void:
 	if spawn_parent == null or not is_instance_valid(player):

@@ -23,8 +23,11 @@ var extraction_time_left := Constants.EXTRACTION_COUNTDOWN
 var extraction_active := false
 var finished := false
 var difficulty_stage := 0
+var battle_room_type := GridTypes.CELL_TASK
 
 func _ready() -> void:
+	RunState.begin_battle()
+	battle_room_type = RunState.current_battle_room_type if RunState.current_battle_room_type != "" else GridTypes.CELL_TASK
 	_build_scene()
 	sync_controller.setup(RunState.next_battle_initial_sync)
 	_update_difficulty()
@@ -50,7 +53,10 @@ func _process(delta: float) -> void:
 		task_time_left = maxf(0.0, task_time_left - delta)
 		_update_difficulty()
 		if task_time_left <= 0.0:
-			_start_extraction()
+			if _requires_target_kill():
+				_finish(false)
+			else:
+				_start_extraction()
 	_update_hud()
 	if sync_controller.sync_rate <= 0.0:
 		_finish(false)
@@ -70,6 +76,7 @@ func _build_scene() -> void:
 	spawner = EnemySpawner.new()
 	add_child(spawner)
 	spawner.setup(player, self, signal_center, Constants.SIGNAL_RADIUS)
+	spawner.set_room_type(battle_room_type)
 	spawner.enemy_spawned.connect(_on_enemy_spawned)
 	weapon_manager = WEAPON_MANAGER_SCENE.instantiate()
 	add_child(weapon_manager)
@@ -85,7 +92,7 @@ func _update_difficulty() -> void:
 	spawner.set_difficulty(difficulty_stage, _get_weapon_level_sum())
 
 func _get_weapon_level_sum() -> int:
-	return int(RunState.weapons["aura"]) + int(RunState.weapons["projectile"]) + int(RunState.weapons["shape"])
+	return RunState.get_weapon_level("projectile") + RunState.get_weapon_level("aura") + RunState.get_weapon_level("shape") + RunState.get_weapon_level("beam")
 
 func _update_sync(delta: float) -> void:
 	var distance := player.global_position.distance_to(signal_center)
@@ -98,12 +105,12 @@ func _update_sync(delta: float) -> void:
 func _update_hud() -> void:
 	var elite_ratio := -1.0
 	for enemy in enemies:
-		if is_instance_valid(enemy) and enemy is EliteEnemy:
+		if is_instance_valid(enemy) and (enemy is EliteEnemy or enemy is BossEnemy):
 			elite_ratio = enemy.get_hp_ratio()
 			break
 	var phase_text := "撤离倒计时：%.1f" % extraction_time_left if extraction_active else "任务剩余：%.1f  难度阶段：%d（武器等级和：%d）" % [task_time_left, difficulty_stage, _get_weapon_level_sum()]
 	if hud.has_method("update_hud"):
-		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, phase_text, RunState.weapons, elite_ratio, RunState.total_score)
+		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, phase_text, RunState.weapons, elite_ratio, RunState.gold)
 
 func _on_enemy_spawned(enemy: Node) -> void:
 	enemies.append(enemy)
@@ -111,10 +118,23 @@ func _on_enemy_spawned(enemy: Node) -> void:
 	enemy.damaged_player.connect(_on_player_damaged)
 
 func _on_enemy_died(enemy: Node) -> void:
+	var is_boss := enemy is BossEnemy
 	var is_elite := enemy is EliteEnemy
-	RunState.total_score += Constants.SCORE_ELITE_KILL if is_elite else Constants.SCORE_SMALL_KILL
-	_spawn_drop(enemy.global_position, Constants.SCORE_ELITE_DROP if is_elite else Constants.SCORE_SMALL_DROP)
+	if is_elite or is_boss:
+		RunState.total_score += Constants.SCORE_ELITE_KILL
+	else:
+		RunState.total_score += Constants.SCORE_SMALL_KILL
+	var drop_points := Constants.SCORE_SMALL_DROP
+	if is_boss:
+		drop_points = Constants.BOSS_GOLD
+	elif is_elite:
+		drop_points = Constants.SCORE_ELITE_DROP
+	_spawn_drop(enemy.global_position, drop_points)
 	enemies.erase(enemy)
+	if is_boss:
+		_collect_all_drops()
+		_finish(true)
+		return
 	if is_elite:
 		_collect_all_drops()
 		_start_extraction()
@@ -129,6 +149,7 @@ func _spawn_drop(drop_position: Vector2, points: int) -> void:
 
 func _on_drop_collected(drop: Node, points: int) -> void:
 	drops.erase(drop)
+	RunState.gold += points
 	RunState.total_score += points
 
 func _collect_all_drops() -> void:
@@ -149,6 +170,9 @@ func _on_player_damaged(amount: float) -> void:
 func get_enemies() -> Array:
 	enemies = enemies.filter(func(enemy: Node) -> bool: return is_instance_valid(enemy))
 	return enemies
+
+func _requires_target_kill() -> bool:
+	return battle_room_type == GridTypes.CELL_ELITE or battle_room_type == GridTypes.CELL_BOSS
 
 func _finish(success: bool) -> void:
 	if finished:

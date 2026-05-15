@@ -23,18 +23,33 @@ func _process(delta: float) -> void:
 		_fire()
 
 func _fire() -> void:
-	var enemies := _valid_enemies()
-	if enemies.is_empty():
-		return
-	enemies.sort_custom(func(a: Node2D, b: Node2D) -> bool:
-		return a.global_position.distance_squared_to(player.global_position) < b.global_position.distance_squared_to(player.global_position)
-	)
+	_fire_burst()
+
+func _fire_burst() -> void:
 	var count := int(Constants.PROJECTILE_COUNT_LV[level])
+	var damage := float(Constants.PROJECTILE_DAMAGE_LV[level])
 	for i in range(count):
-		var target: Node2D = enemies[min(i, enemies.size() - 1)]
+		if i > 0:
+			await get_tree().create_timer(0.1).timeout
+		if level <= 0 or not is_instance_valid(player):
+			return
+		var target := _nearest_enemy()
+		if target == null:
+			return
 		var projectile := ProjectileView.new()
 		player.get_parent().add_child(projectile)
-		projectile.setup(player.global_position, target, Constants.PROJECTILE_DAMAGE, Constants.PROJECTILE_SPEED)
+		projectile.setup(player.global_position, target, damage, Constants.PROJECTILE_SPEED)
+
+func _nearest_enemy() -> Node2D:
+	var nearest: Node2D = null
+	var nearest_distance := INF
+	for enemy in _valid_enemies():
+		var enemy_node := enemy as Node2D
+		var distance := enemy_node.global_position.distance_squared_to(player.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = enemy_node
+	return nearest
 
 func _valid_enemies() -> Array:
 	var result: Array = []

@@ -1,0 +1,32 @@
+{
+  "mode": "static",
+  "size": 6,
+  "start": [0, 5],
+  "legend": {
+    "S": "start",
+    ".": "empty",
+    "C": "chest",
+    "T": "task",
+    "E": "elite",
+    "B": "boss",
+    "#": "blocked"
+  },
+  "rows": [
+    "..C..B",
+    ".##.E.",
+    ".T..#.",
+    "C.#T..",
+    "..E.#C",
+    "S..T#."
+  ],
+  "random": {
+    "size": 6,
+    "start": [0, 5],
+    "task_count": 3,
+    "chest_count": 3,
+    "elite_count": 2,
+    "boss_count": 1,
+    "obstacle_count": 7,
+    "max_attempts": 100
+  }
+}

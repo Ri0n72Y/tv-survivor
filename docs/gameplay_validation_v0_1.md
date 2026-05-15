@@ -33,7 +33,7 @@ Validate a minimal loop made entirely of geometric 2D shapes:
 - Leaving the circle disconnects controls and pulls the avatar back toward the center.
 - Small enemies spawn every second.
 - One elite enemy appears after 45 seconds and has a visible health bar.
-- Surviving for 90 seconds completes the battle.
+- Surviving for 30 seconds completes the battle.
 
 ## Weapons
 

@@ -5,6 +5,7 @@ signal restart_requested
 
 const Constants = preload("res://scripts/core/Constants.gd")
 const CELL_SCENE := preload("res://scenes/grid/GridCellView.tscn")
+const WEAPON_IDS: Array[String] = ["projectile", "aura", "shape", "beam"]
 
 var title_label: Label
 var progress_label: Label
@@ -14,90 +15,122 @@ var guide_label: Label
 var message_label: Label
 var grid_container: GridContainer
 var victory_panel: Panel
+var upgrade_overlay: Panel
+var upgrade_cards_box: HBoxContainer
+var upgrade_subtitle_label: Label
 var cells: Array = []
+var pending_chest_cell: Dictionary = {}
 var rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	rng.randomize()
 	_build_ui()
 	if RunState.grid_data.is_empty():
-		RunState.grid_size = Constants.GRID_SIZE
-		RunState.total_tasks = Constants.TASK_COUNT
-		RunState.player_grid_pos = GridGenerator.START_POS
-		RunState.previous_grid_pos = RunState.player_grid_pos
 		RunState.grid_data = GridGenerator.generate(RunState.grid_seed)
+		RunState.grid_size = RunState.grid_data.size()
+		RunState.total_tasks = _count_cells(GridTypes.CELL_TASK)
+		RunState.player_grid_pos = _find_start_pos()
+		RunState.previous_grid_pos = RunState.player_grid_pos
+		_prepare_chests()
 	_refresh_all()
 
 func handle_battle_result(success: bool, final_sync_rate: float) -> void:
-	var task_pos: Vector2i = RunState.current_task_pos
-	if success and _is_inside(task_pos):
-		var cell: Dictionary = RunState.grid_data[task_pos.y][task_pos.x]
+	var room_pos: Vector2i = RunState.current_task_pos
+	if success and _is_inside(room_pos):
+		var cell: Dictionary = RunState.grid_data[room_pos.y][room_pos.x]
 		if not bool(cell.get("cleared", false)):
 			cell["cleared"] = true
-			RunState.completed_tasks += 1
+			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_TASK:
+				RunState.completed_tasks += 1
 		if final_sync_rate >= 80.0:
-			GridGenerator.reveal_ring(RunState.grid_data, task_pos)
+			GridGenerator.reveal_ring(RunState.grid_data, room_pos)
 		RunState.next_battle_initial_sync = 70.0 if final_sync_rate < 30.0 else 100.0
 		message_label.text = "战斗成功，同步率 %.0f" % final_sync_rate
 	else:
 		RunState.player_grid_pos = RunState.previous_grid_pos
 		RunState.next_battle_initial_sync = 100.0
-		message_label.text = "战斗失败，返回上一个格子"
+		message_label.text = "战斗失败，返回上一个格子。"
 	RunState.current_task_pos = Vector2i(-1, -1)
+	RunState.current_room_cell = Vector2i.ZERO
+	RunState.current_battle_room_type = ""
 	GridGenerator.reveal_neighbors(RunState.grid_data, RunState.player_grid_pos)
 	_refresh_all()
 
 func _build_ui() -> void:
-	var root := VBoxContainer.new()
+	var root := HBoxContainer.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 10)
+	root.add_theme_constant_override("separation", 28)
 	root.offset_left = 32
 	root.offset_top = 24
 	root.offset_right = -32
 	root.offset_bottom = -24
 	add_child(root)
 
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 32)
-	root.add_child(header)
+	var play_column := VBoxContainer.new()
+	play_column.custom_minimum_size = Vector2(540, 0)
+	play_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	play_column.add_theme_constant_override("separation", 14)
+	root.add_child(play_column)
+
+	var grid_panel := Panel.new()
+	grid_panel.custom_minimum_size = Vector2(540, 540)
+	grid_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	play_column.add_child(grid_panel)
+
+	var grid_center := CenterContainer.new()
+	grid_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	grid_center.offset_left = 20
+	grid_center.offset_top = 20
+	grid_center.offset_right = -20
+	grid_center.offset_bottom = -20
+	grid_panel.add_child(grid_center)
+
+	grid_container = GridContainer.new()
+	grid_container.columns = RunState.grid_size
+	grid_container.custom_minimum_size = Vector2(480, 480)
+	grid_center.add_child(grid_container)
+
+	var restart_button := Button.new()
+	restart_button.text = "重新开始"
+	restart_button.custom_minimum_size = Vector2(180, 44)
+	restart_button.pressed.connect(func() -> void: restart_requested.emit())
+	play_column.add_child(restart_button)
+
+	var info_column := VBoxContainer.new()
+	info_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	info_column.add_theme_constant_override("separation", 12)
+	root.add_child(info_column)
 
 	title_label = Label.new()
 	title_label.text = "阵列探索验证"
 	title_label.add_theme_font_size_override("font_size", 28)
-	header.add_child(title_label)
+	info_column.add_child(title_label)
 
 	progress_label = Label.new()
-	header.add_child(progress_label)
-
-	var restart_button := Button.new()
-	restart_button.text = "重新开始"
-	restart_button.pressed.connect(func() -> void: restart_requested.emit())
-	header.add_child(restart_button)
+	info_column.add_child(progress_label)
 
 	weapon_label = Label.new()
-	root.add_child(weapon_label)
+	weapon_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info_column.add_child(weapon_label)
 
 	score_label = Label.new()
-	root.add_child(score_label)
+	info_column.add_child(score_label)
 
 	guide_label = Label.new()
 	guide_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	guide_label.text = "操作指南：阵列界面使用 WASD / 方向键移动；只能进入已揭示的相邻非障碍格。\n进入任务点后，移动角色、躲避敌人、收集绿色掉落物获得积分。R 重新开始。"
-	root.add_child(guide_label)
+	guide_label.text = "操作指南：阵列界面使用 WASD / 方向键移动；只能进入已揭示的相邻非障碍格。宝箱需要金币开启，战斗房会进入幸存者战斗。"
+	info_column.add_child(guide_label)
 
 	message_label = Label.new()
+	message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	message_label.text = "使用 WASD 或方向键移动到已揭示的相邻格。"
-	root.add_child(message_label)
-
-	grid_container = GridContainer.new()
-	grid_container.columns = Constants.GRID_SIZE
-	grid_container.custom_minimum_size = Vector2(480, 480)
-	root.add_child(grid_container)
+	info_column.add_child(message_label)
 
 	victory_panel = Panel.new()
 	victory_panel.visible = false
 	victory_panel.custom_minimum_size = Vector2(520, 130)
-	root.add_child(victory_panel)
+	info_column.add_child(victory_panel)
 	var victory_box := VBoxContainer.new()
 	victory_box.name = "VictoryBox"
 	victory_box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -108,7 +141,7 @@ func _build_ui() -> void:
 	victory_panel.add_child(victory_box)
 	var victory_label := Label.new()
 	victory_label.name = "VictoryLabel"
-	victory_label.text = "验证完成"
+	victory_label.text = "Boss 已击败"
 	victory_label.add_theme_font_size_override("font_size", 24)
 	victory_box.add_child(victory_label)
 	var victory_detail := Label.new()
@@ -119,22 +152,76 @@ func _build_ui() -> void:
 	victory_restart.pressed.connect(func() -> void: restart_requested.emit())
 	victory_box.add_child(victory_restart)
 
+	_build_upgrade_overlay()
+
+func _build_upgrade_overlay() -> void:
+	upgrade_overlay = Panel.new()
+	upgrade_overlay.visible = false
+	upgrade_overlay.z_index = 100
+	upgrade_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(upgrade_overlay)
+
+	var shade := ColorRect.new()
+	shade.color = Color(0.02, 0.025, 0.035, 0.82)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	upgrade_overlay.add_child(shade)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.offset_left = 40
+	center.offset_top = 40
+	center.offset_right = -40
+	center.offset_bottom = -40
+	upgrade_overlay.add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(760, 360)
+	center.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 18)
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "选择一项武器升级"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 26)
+	box.add_child(title)
+
+	upgrade_subtitle_label = Label.new()
+	upgrade_subtitle_label.text = "宝箱开启消耗 %d 金币。" % Constants.NORMAL_CHEST_COST
+	upgrade_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(upgrade_subtitle_label)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(720, 230)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+
+	upgrade_cards_box = HBoxContainer.new()
+	upgrade_cards_box.add_theme_constant_override("separation", 12)
+	scroll.add_child(upgrade_cards_box)
+
 func _refresh_all() -> void:
 	_refresh_labels()
 	_refresh_grid()
 	_refresh_victory()
 
 func _refresh_labels() -> void:
-	progress_label.text = "任务进度：%d/%d" % [RunState.completed_tasks, RunState.total_tasks]
-	weapon_label.text = "当前武器：光环 Lv.%d   投掷物 Lv.%d   固定形状 Lv.%d" % [RunState.weapons["aura"], RunState.weapons["projectile"], RunState.weapons["shape"]]
-	score_label.text = "总分：%d" % RunState.total_score
+	var boss_total := _count_cells(GridTypes.CELL_BOSS)
+	var boss_cleared := _count_cleared_cells(GridTypes.CELL_BOSS)
+	progress_label.text = "任务进度：%d/%d  Boss：%d/%d" % [RunState.completed_tasks, RunState.total_tasks, boss_cleared, boss_total]
+	weapon_label.text = "武器：%d/%d  基础弹 Lv.%d  光环 Lv.%d  固定形状 Lv.%d  射线 Lv.%d\n被动：%d/%d" % [RunState.get_weapon_count(), RunState.weapon_slots, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam"), RunState.get_passive_count(), RunState.passive_slots]
+	score_label.text = "金币：%d" % RunState.gold
 
 func _refresh_grid() -> void:
 	for child in grid_container.get_children():
 		child.queue_free()
 	cells.clear()
-	for y in range(Constants.GRID_SIZE):
-		for x in range(Constants.GRID_SIZE):
+	grid_container.columns = RunState.grid_size
+	for y in range(RunState.grid_size):
+		for x in range(RunState.grid_size):
 			var pos := Vector2i(x, y)
 			var view := CELL_SCENE.instantiate()
 			grid_container.add_child(view)
@@ -142,15 +229,17 @@ func _refresh_grid() -> void:
 			cells.append(view)
 
 func _refresh_victory() -> void:
-	var won := RunState.completed_tasks >= RunState.total_tasks
+	var won := _is_run_won()
 	victory_panel.visible = won
 	if won:
-		message_label.text = "本局完成：%d/%d，验证胜利" % [RunState.completed_tasks, RunState.total_tasks]
+		message_label.text = "Boss 已清理，本局结束。"
 		var detail := victory_panel.get_node("VictoryBox/VictoryDetail") as Label
-		detail.text = "你完成了 3 个任务点。构筑：光环 Lv.%d / 投掷物 Lv.%d / 固定形状 Lv.%d" % [RunState.weapons["aura"], RunState.weapons["projectile"], RunState.weapons["shape"]]
+		detail.text = "任务完成：%d/%d。构筑：基础弹 Lv.%d / 光环 Lv.%d / 固定形状 Lv.%d / 射线 Lv.%d" % [RunState.completed_tasks, RunState.total_tasks, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam")]
 
 func _input(event: InputEvent) -> void:
-	if RunState.completed_tasks >= RunState.total_tasks:
+	if upgrade_overlay != null and upgrade_overlay.visible:
+		return
+	if _is_run_won():
 		return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
@@ -170,7 +259,7 @@ func _input(event: InputEvent) -> void:
 	_try_enter_cell(RunState.player_grid_pos + direction)
 
 func _try_enter_cell(pos: Vector2i) -> void:
-	if RunState.completed_tasks >= RunState.total_tasks:
+	if _is_run_won():
 		return
 	if not _can_enter(pos):
 		message_label.text = "只能用键盘进入已揭示、相邻、非障碍格。"
@@ -179,18 +268,16 @@ func _try_enter_cell(pos: Vector2i) -> void:
 	RunState.player_grid_pos = pos
 	GridGenerator.reveal_neighbors(RunState.grid_data, pos)
 	var cell: Dictionary = RunState.grid_data[pos.y][pos.x]
-	match String(cell["type"]):
-		GridTypes.CELL_CHEST:
-			_open_chest(cell)
-		GridTypes.CELL_TASK:
-			if not bool(cell.get("cleared", false)):
-				RunState.current_task_pos = pos
-				message_label.text = "进入任务点战斗。"
-				_refresh_all()
-				enter_battle_requested.emit()
-				return
-		_:
-			message_label.text = "探索完成，迷雾已展开。"
+	var cell_type := String(cell["type"])
+	if cell_type == GridTypes.CELL_CHEST:
+		_open_chest(cell)
+	elif _is_battle_room(cell_type):
+		if not bool(cell.get("cleared", false)):
+			_enter_battle_room(pos, cell_type)
+			return
+		message_label.text = "这个战斗房已经清理。"
+	else:
+		message_label.text = "探索完成，迷雾已展开。"
 	_refresh_all()
 
 func _can_enter(pos: Vector2i) -> bool:
@@ -206,30 +293,213 @@ func _can_enter(pos: Vector2i) -> bool:
 		return false
 	return true
 
+func _enter_battle_room(pos: Vector2i, cell_type: String) -> void:
+	RunState.current_task_pos = pos
+	RunState.current_room_cell = pos
+	RunState.current_battle_room_type = cell_type
+	match cell_type:
+		GridTypes.CELL_ELITE:
+			message_label.text = "进入精英房。"
+		GridTypes.CELL_BOSS:
+			message_label.text = "进入 Boss 房。"
+		_:
+			message_label.text = "进入任务点战斗。"
+	call_deferred("_emit_enter_battle_requested")
+
+func _emit_enter_battle_requested() -> void:
+	enter_battle_requested.emit()
+
 func _open_chest(cell: Dictionary) -> void:
 	if bool(cell.get("opened", false)):
 		message_label.text = "宝箱已经打开。"
 		return
-	var candidates := ["aura", "projectile", "shape"]
-	candidates.shuffle()
-	for weapon_name in candidates:
-		if int(RunState.weapons[weapon_name]) < 3:
-			RunState.weapons[weapon_name] = int(RunState.weapons[weapon_name]) + 1
-			cell["opened"] = true
-			message_label.text = "打开宝箱：%s 提升到 Lv.%d" % [_weapon_display_name(weapon_name), RunState.weapons[weapon_name]]
-			return
-	cell["opened"] = true
-	message_label.text = "所有武器已达到 Lv.3。"
+	var cost := int(cell.get("cost", Constants.NORMAL_CHEST_COST))
+	if RunState.gold < cost:
+		message_label.text = "金币不足：打开宝箱需要 %d 金币。" % cost
+		_refresh_all()
+		return
+	if _get_upgradable_weapons().is_empty():
+		cell["opened"] = true
+		message_label.text = "所有武器已经达到 Lv.3。"
+		_refresh_all()
+		return
+	pending_chest_cell = cell
+	_show_upgrade_overlay(_get_chest_upgrade_choices(cell))
+
+func _show_upgrade_overlay(choices: Array[String]) -> void:
+	for child in upgrade_cards_box.get_children():
+		child.queue_free()
+	if upgrade_subtitle_label != null:
+		upgrade_subtitle_label.text = "宝箱开启消耗 %d 金币。" % int(pending_chest_cell.get("cost", Constants.NORMAL_CHEST_COST))
+	for weapon_id in choices:
+		upgrade_cards_box.add_child(_create_upgrade_card(weapon_id))
+	upgrade_overlay.visible = true
+
+func _create_upgrade_card(weapon_id: String) -> Button:
+	var card := Button.new()
+	card.custom_minimum_size = Vector2(220, 210)
+	card.text = _upgrade_card_text(weapon_id)
+	card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card.disabled = RunState.get_weapon_level(weapon_id) >= 3
+	card.pressed.connect(func() -> void: _choose_weapon_upgrade(weapon_id))
+	return card
+
+func _choose_weapon_upgrade(weapon_id: String) -> void:
+	if RunState.get_weapon_level(weapon_id) >= 3:
+		return
+	var cost := int(pending_chest_cell.get("cost", Constants.NORMAL_CHEST_COST))
+	if RunState.gold < cost:
+		upgrade_overlay.visible = false
+		message_label.text = "金币不足：打开宝箱需要 %d 金币。" % cost
+		_refresh_all()
+		return
+	RunState.gold -= cost
+	RunState.weapons[weapon_id] = mini(3, RunState.get_weapon_level(weapon_id) + 1)
+	pending_chest_cell["opened"] = true
+	upgrade_overlay.visible = false
+	message_label.text = "打开宝箱：%s 提升到 Lv.%d" % [_weapon_display_name(weapon_id), RunState.get_weapon_level(weapon_id)]
+	pending_chest_cell = {}
+	_refresh_all()
+
+func _roll_upgrade_choices(count: int) -> Array[String]:
+	var shuffled: Array[String] = []
+	for weapon_id in WEAPON_IDS:
+		shuffled.append(weapon_id)
+	shuffled.shuffle()
+	var choices: Array[String] = []
+	for i in range(mini(count, shuffled.size())):
+		choices.append(shuffled[i])
+	var has_upgradable := false
+	for weapon_id in choices:
+		if RunState.get_weapon_level(weapon_id) < 3:
+			has_upgradable = true
+			break
+	if not has_upgradable:
+		var upgradable := _get_upgradable_weapons()
+		if not upgradable.is_empty():
+			choices[choices.size() - 1] = upgradable[0]
+	return choices
+
+func _get_chest_upgrade_choices(cell: Dictionary) -> Array[String]:
+	var choices: Array[String] = []
+	var stored_choices: Array = cell.get("upgrade_choices", [])
+	for weapon_id in stored_choices:
+		choices.append(String(weapon_id))
+	if choices.is_empty():
+		choices = _roll_upgrade_choices(3)
+
+	var has_upgradable := false
+	for weapon_id in choices:
+		if RunState.get_weapon_level(weapon_id) < 3:
+			has_upgradable = true
+			break
+	if not has_upgradable:
+		var upgradable := _get_upgradable_weapons()
+		if not upgradable.is_empty():
+			choices[choices.size() - 1] = upgradable[0]
+	return choices
+
+func _get_upgradable_weapons() -> Array[String]:
+	var result: Array[String] = []
+	for weapon_id in WEAPON_IDS:
+		if RunState.get_weapon_level(weapon_id) < 3:
+			result.append(weapon_id)
+	return result
+
+func _upgrade_card_text(weapon_id: String) -> String:
+	var level := RunState.get_weapon_level(weapon_id)
+	if level <= 0:
+		return "%s\n未获得\nLv.1\n%s" % [_weapon_display_name(weapon_id), _weapon_stats_text(weapon_id, 1)]
+	if level >= 3:
+		return "%s\n当前 Lv.3\n%s\n已满级" % [_weapon_display_name(weapon_id), _weapon_stats_text(weapon_id, 3)]
+	var next_level := level + 1
+	return "%s\n当前 Lv.%d\n%s\n\n升级后 Lv.%d\n%s" % [_weapon_display_name(weapon_id), level, _weapon_stats_text(weapon_id, level), next_level, _weapon_stats_text(weapon_id, next_level)]
+
+func _weapon_stats_text(weapon_id: String, level: int) -> String:
+	var safe_level := clampi(level, 1, 3)
+	match weapon_id:
+		"projectile":
+			return "弹数 %d / 伤害 %.1f / 冷却 %.2fs" % [Constants.PROJECTILE_COUNT_LV[safe_level], Constants.PROJECTILE_DAMAGE_LV[safe_level], Constants.PROJECTILE_COOLDOWN_LV[safe_level]]
+		"aura":
+			return "半径 %.0f / 伤害 %.1f / 间隔 %.2fs" % [Constants.AURA_RADIUS_LV[safe_level], Constants.AURA_DAMAGE_LV[safe_level], Constants.AURA_TICK_LV[safe_level]]
+		"shape":
+			return "伤害 %.1f / 冷却 %.2fs / 持续 %.1fs" % [Constants.SHAPE_DAMAGE_LV[safe_level], Constants.SHAPE_COOLDOWN_LV[safe_level], Constants.SHAPE_DURATION]
+		"beam":
+			return "范围 %.0f / 伤害 %.1f / 间隔 %.2fs" % [Constants.BEAM_RANGE, Constants.BEAM_DAMAGE_LV[safe_level], Constants.BEAM_TICK_LV[safe_level]]
+	return ""
 
 func _weapon_display_name(weapon_name: String) -> String:
 	match weapon_name:
 		"aura":
 			return "光环"
 		"projectile":
-			return "投掷物"
+			return "基础弹"
 		"shape":
 			return "固定形状"
+		"beam":
+			return "射线"
 	return weapon_name
 
+func _is_battle_room(cell_type: String) -> bool:
+	return cell_type == GridTypes.CELL_TASK or cell_type == GridTypes.CELL_ELITE or cell_type == GridTypes.CELL_BOSS
+
 func _is_inside(pos: Vector2i) -> bool:
-	return pos.x >= 0 and pos.y >= 0 and pos.x < Constants.GRID_SIZE and pos.y < Constants.GRID_SIZE
+	return pos.x >= 0 and pos.y >= 0 and pos.x < RunState.grid_size and pos.y < RunState.grid_size
+
+func _find_start_pos() -> Vector2i:
+	for y in range(RunState.grid_data.size()):
+		for x in range(RunState.grid_data[y].size()):
+			if String(RunState.grid_data[y][x].get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_START:
+				return Vector2i(x, y)
+	return GridGenerator.START_POS
+
+func _count_cells(cell_type: String) -> int:
+	var count := 0
+	for row in RunState.grid_data:
+		for cell in row:
+			if String(cell.get("type", GridTypes.CELL_EMPTY)) == cell_type:
+				count += 1
+	return count
+
+func _prepare_chests() -> void:
+	for row in RunState.grid_data:
+		for cell in row:
+			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_CHEST:
+				if not cell.has("cost"):
+					cell["cost"] = _roll_chest_cost(Vector2i(int(cell.get("x", 0)), int(cell.get("y", 0))))
+				if not cell.has("upgrade_choices"):
+					var choice_count := 4 if int(cell["cost"]) >= Constants.ADVANCED_CHEST_COST else 3
+					cell["upgrade_choices"] = _roll_chest_upgrade_template(Vector2i(int(cell.get("x", 0)), int(cell.get("y", 0))), choice_count)
+
+func _roll_chest_cost(pos: Vector2i) -> int:
+	var local_rng := RandomNumberGenerator.new()
+	local_rng.seed = int(RunState.grid_seed + pos.x * 61031 + pos.y * 95791)
+	return Constants.ADVANCED_CHEST_COST if local_rng.randf() < 0.35 else Constants.NORMAL_CHEST_COST
+
+func _roll_chest_upgrade_template(pos: Vector2i, count: int) -> Array[String]:
+	var local_rng := RandomNumberGenerator.new()
+	local_rng.seed = int(RunState.grid_seed + pos.x * 92821 + pos.y * 68917)
+	var shuffled: Array[String] = []
+	for weapon_id in WEAPON_IDS:
+		shuffled.append(weapon_id)
+	for i in range(shuffled.size() - 1, 0, -1):
+		var j := local_rng.randi_range(0, i)
+		var tmp := shuffled[i]
+		shuffled[i] = shuffled[j]
+		shuffled[j] = tmp
+	var result: Array[String] = []
+	for i in range(mini(count, shuffled.size())):
+		result.append(shuffled[i])
+	return result
+
+func _count_cleared_cells(cell_type: String) -> int:
+	var count := 0
+	for row in RunState.grid_data:
+		for cell in row:
+			if String(cell.get("type", GridTypes.CELL_EMPTY)) == cell_type and bool(cell.get("cleared", false)):
+				count += 1
+	return count
+
+func _is_run_won() -> bool:
+	var boss_total := _count_cells(GridTypes.CELL_BOSS)
+	return boss_total > 0 and _count_cleared_cells(GridTypes.CELL_BOSS) >= boss_total
