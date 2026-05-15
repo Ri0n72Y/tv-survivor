@@ -24,10 +24,12 @@ var extraction_active := false
 var finished := false
 var difficulty_stage := 0
 var battle_room_type := GridTypes.CELL_TASK
+var room_rules: Dictionary = {}
 
 func _ready() -> void:
 	RunState.begin_battle()
 	battle_room_type = RunState.current_battle_room_type if RunState.current_battle_room_type != "" else GridTypes.CELL_TASK
+	room_rules = RoomRules.for_room_type(battle_room_type)
 	_build_scene()
 	sync_controller.setup(RunState.next_battle_initial_sync)
 	_update_difficulty()
@@ -44,7 +46,10 @@ func _process(delta: float) -> void:
 		# Debug-only escape hatch for fast editor iteration; not part of formal win/loss flow.
 		_finish(false)
 		return
-	_update_sync(delta)
+	if _uses_sync():
+		_update_sync(delta)
+	else:
+		player.controlled = true
 	if extraction_active:
 		extraction_time_left = maxf(0.0, extraction_time_left - delta)
 		if extraction_time_left <= 0.0:
@@ -58,7 +63,7 @@ func _process(delta: float) -> void:
 			else:
 				_start_extraction()
 	_update_hud()
-	if sync_controller.sync_rate <= 0.0:
+	if _uses_sync() and sync_controller.sync_rate <= 0.0:
 		_finish(false)
 
 func _build_scene() -> void:
@@ -66,12 +71,14 @@ func _build_scene() -> void:
 	background.color = Color(0.045, 0.05, 0.07)
 	background.size = Vector2(Constants.SCREEN_WIDTH, Constants.SCREEN_HEIGHT)
 	add_child(background)
-	var signal_area := SIGNAL_AREA_SCENE.instantiate()
-	signal_area.global_position = signal_center
-	add_child(signal_area)
+	if bool(room_rules.get(RoomRules.SHOW_SIGNAL_AREA, true)):
+		var signal_area := SIGNAL_AREA_SCENE.instantiate()
+		signal_area.global_position = signal_center
+		add_child(signal_area)
 	player = PLAYER_SCENE.instantiate()
 	player.global_position = signal_center
 	player.signal_center = signal_center
+	player.arena_bounds_enabled = bool(room_rules.get(RoomRules.EDGE_IS_WALL, false))
 	add_child(player)
 	spawner = EnemySpawner.new()
 	add_child(spawner)
@@ -108,9 +115,20 @@ func _update_hud() -> void:
 		if is_instance_valid(enemy) and (enemy is EliteEnemy or enemy is BossEnemy):
 			elite_ratio = enemy.get_hp_ratio()
 			break
-	var phase_text := "撤离倒计时：%.1f" % extraction_time_left if extraction_active else "任务剩余：%.1f  难度阶段：%d（武器等级和：%d）" % [task_time_left, difficulty_stage, _get_weapon_level_sum()]
+	var phase_text := _get_phase_text()
 	if hud.has_method("update_hud"):
-		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, phase_text, RunState.weapons, elite_ratio, RunState.gold)
+		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, phase_text, RunState.weapons, elite_ratio, RunState.gold, _uses_sync(), battle_room_type)
+
+func _get_phase_text() -> String:
+	if extraction_active:
+		return "撤离倒计时：%.1f" % extraction_time_left
+	var room_label := "任务"
+	match battle_room_type:
+		GridTypes.CELL_ELITE:
+			room_label = "精英房"
+		GridTypes.CELL_BOSS:
+			room_label = "Boss 房"
+	return "%s剩余：%.1f  难度阶段：%d（武器等级和：%d）" % [room_label, task_time_left, difficulty_stage, _get_weapon_level_sum()]
 
 func _on_enemy_spawned(enemy: Node) -> void:
 	enemies.append(enemy)
@@ -165,7 +183,8 @@ func _start_extraction() -> void:
 	spawner.stop()
 
 func _on_player_damaged(amount: float) -> void:
-	sync_controller.apply_damage(amount)
+	if _uses_sync():
+		sync_controller.apply_damage(amount)
 
 func get_enemies() -> Array:
 	enemies = enemies.filter(func(enemy: Node) -> bool: return is_instance_valid(enemy))
@@ -174,9 +193,13 @@ func get_enemies() -> Array:
 func _requires_target_kill() -> bool:
 	return battle_room_type == GridTypes.CELL_ELITE or battle_room_type == GridTypes.CELL_BOSS
 
+func _uses_sync() -> bool:
+	return bool(room_rules.get(RoomRules.USES_SYNC, true))
+
 func _finish(success: bool) -> void:
 	if finished:
 		return
 	finished = true
 	spawner.stop()
-	battle_finished.emit(success, sync_controller.sync_rate)
+	var final_sync_rate := sync_controller.sync_rate if _uses_sync() else RunState.next_battle_initial_sync
+	battle_finished.emit(success, final_sync_rate)

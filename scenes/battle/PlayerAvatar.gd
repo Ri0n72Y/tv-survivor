@@ -5,6 +5,9 @@ const Constants = preload("res://scripts/core/Constants.gd")
 
 var controlled := true
 var signal_center := Vector2(640, 360)
+var arena_bounds_enabled := false
+var arena_rect := Rect2(Vector2.ZERO, Vector2(Constants.SCREEN_WIDTH, Constants.SCREEN_HEIGHT))
+var arena_margin := 14.0
 
 func _physics_process(_delta: float) -> void:
 	if controlled:
@@ -21,6 +24,9 @@ func _physics_process(_delta: float) -> void:
 	else:
 		velocity = global_position.direction_to(signal_center) * Constants.PLAYER_SPEED
 	move_and_slide()
+	if arena_bounds_enabled:
+		global_position.x = clampf(global_position.x, arena_rect.position.x + arena_margin, arena_rect.end.x - arena_margin)
+		global_position.y = clampf(global_position.y, arena_rect.position.y + arena_margin, arena_rect.end.y - arena_margin)
 
 func _draw() -> void:
 	draw_circle(Vector2.ZERO, 14.0, Color(0.0, 0.78, 0.9))

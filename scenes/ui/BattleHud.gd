@@ -48,8 +48,11 @@ func _ready() -> void:
 	elite_bar.visible = false
 	box.add_child(elite_bar)
 
-func update_hud(sync_rate: float, signal_text: String, phase_text: String, weapons: Dictionary, elite_ratio: float, gold: int) -> void:
+func update_hud(sync_rate: float, signal_text: String, phase_text: String, _weapons: Dictionary, elite_ratio: float, gold: int, uses_sync: bool = true, room_type: String = GridTypes.CELL_TASK) -> void:
 	score_label.text = "金币：%d" % gold
+	sync_label.visible = uses_sync
+	sync_bar.visible = uses_sync
+	signal_label.visible = uses_sync
 	sync_bar.value = sync_rate
 	sync_label.text = "同步率：%.0f / 100" % sync_rate
 	signal_label.text = signal_text
@@ -60,6 +63,12 @@ func update_hud(sync_rate: float, signal_text: String, phase_text: String, weapo
 	else:
 		signal_label.add_theme_color_override("font_color", Color.WHITE)
 	time_label.text = phase_text
+	if uses_sync:
+		guide_label.text = "指南：WASD / 方向键移动；保持同步率，拾取绿色掉落金币；30 秒后撤离，击杀精英会自动收集并提前撤离。"
+	elif room_type == GridTypes.CELL_BOSS:
+		guide_label.text = "指南：封闭 Boss 竞技场；边缘是墙，清理 Boss 后胜利；拾取绿色掉落金币。"
+	else:
+		guide_label.text = "指南：封闭精英竞技场；边缘是墙，击杀精英后自动收集并撤离；拾取绿色掉落金币。"
 	weapon_label.text = "武器：%d/%d  基础弹 Lv.%d  光环 Lv.%d  固定形状 Lv.%d  射线 Lv.%d\n被动：%d/%d" % [RunState.get_weapon_count(), RunState.weapon_slots, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam"), RunState.get_passive_count(), RunState.passive_slots]
 	var has_elite := elite_ratio >= 0.0
 	elite_label.visible = has_elite

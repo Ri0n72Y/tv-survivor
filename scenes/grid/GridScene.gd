@@ -36,16 +36,21 @@ func _ready() -> void:
 
 func handle_battle_result(success: bool, final_sync_rate: float) -> void:
 	var room_pos: Vector2i = RunState.current_task_pos
+	var room_type := RunState.current_battle_room_type
 	if success and _is_inside(room_pos):
 		var cell: Dictionary = RunState.grid_data[room_pos.y][room_pos.x]
 		if not bool(cell.get("cleared", false)):
 			cell["cleared"] = true
 			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_TASK:
 				RunState.completed_tasks += 1
-		if final_sync_rate >= 80.0:
-			GridGenerator.reveal_ring(RunState.grid_data, room_pos)
-		RunState.next_battle_initial_sync = 70.0 if final_sync_rate < 30.0 else 100.0
-		message_label.text = "战斗成功，同步率 %.0f" % final_sync_rate
+		if RoomRules.uses_sync(room_type):
+			if final_sync_rate >= 80.0:
+				GridGenerator.reveal_ring(RunState.grid_data, room_pos)
+			RunState.next_battle_initial_sync = 70.0 if final_sync_rate < 30.0 else 100.0
+			message_label.text = "战斗成功，同步率 %.0f" % final_sync_rate
+		else:
+			RunState.next_battle_initial_sync = 100.0
+			message_label.text = "战斗成功，竞技场已清理。"
 	else:
 		RunState.player_grid_pos = RunState.previous_grid_pos
 		RunState.next_battle_initial_sync = 100.0
