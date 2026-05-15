@@ -13,6 +13,12 @@ static func for_room_type(room_type: String) -> Dictionary:
 				SHOW_SIGNAL_AREA: false,
 				EDGE_IS_WALL: true,
 			}
+		GridTypes.CELL_TASK, GridTypes.CELL_SEARCH:
+			return {
+				USES_SYNC: true,
+				SHOW_SIGNAL_AREA: true,
+				EDGE_IS_WALL: false,
+			}
 		_:
 			return {
 				USES_SYNC: true,

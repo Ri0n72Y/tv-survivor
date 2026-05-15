@@ -15,6 +15,8 @@ func get_enemies() -> Array:
 	return []
 
 func _start_weapons() -> void:
+	for child in get_children():
+		child.queue_free()
 	if RunState.get_weapon_level("aura") > 0:
 		var aura := AuraWeapon.new()
 		add_child(aura)
@@ -31,3 +33,6 @@ func _start_weapons() -> void:
 		var beam := BeamWeapon.new()
 		add_child(beam)
 		beam.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("beam"))
+
+func refresh_weapons() -> void:
+	_start_weapons()

@@ -7,6 +7,7 @@
     ".": "empty",
     "C": "chest",
     "T": "task",
+    "R": "search",
     "E": "elite",
     "B": "boss",
     "#": "blocked"
@@ -14,7 +15,7 @@
   "rows": [
     "..C..B",
     ".##.E.",
-    ".T..#.",
+    ".R..#.",
     "C.#T..",
     "..E.#C",
     "S..T#."
@@ -23,6 +24,7 @@
     "size": 6,
     "start": [0, 5],
     "task_count": 3,
+    "search_count": 1,
     "chest_count": 3,
     "elite_count": 2,
     "boss_count": 1,

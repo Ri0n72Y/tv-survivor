@@ -40,6 +40,8 @@ func _draw() -> void:
 				color = Color(0.92, 0.66, 0.12)
 			GridTypes.CELL_TASK:
 				color = Color(0.48, 0.24, 0.75) if not bool(cell_data.get("cleared", false)) else Color(0.24, 0.12, 0.36)
+			GridTypes.CELL_SEARCH:
+				color = Color(0.12, 0.50, 0.78) if not bool(cell_data.get("cleared", false)) else Color(0.06, 0.22, 0.34)
 			GridTypes.CELL_ELITE:
 				color = Color(0.72, 0.18, 0.18) if not bool(cell_data.get("cleared", false)) else Color(0.30, 0.08, 0.08)
 			GridTypes.CELL_BOSS:
@@ -60,21 +62,23 @@ func _update_label() -> void:
 		return
 	var cell_type := String(cell_data.get("type", GridTypes.CELL_EMPTY))
 	if _is_battle_room(cell_type) and bool(cell_data.get("cleared", false)):
-		mark_label.text = "完成"
+		mark_label.text = "Done"
 	elif cell_type == GridTypes.CELL_CHEST and bool(cell_data.get("opened", false)):
-		mark_label.text = "已开"
+		mark_label.text = "Open"
 	elif cell_type == GridTypes.CELL_TASK:
-		mark_label.text = "任务"
+		mark_label.text = "Task"
+	elif cell_type == GridTypes.CELL_SEARCH:
+		mark_label.text = "Search"
 	elif cell_type == GridTypes.CELL_ELITE:
-		mark_label.text = "精英"
+		mark_label.text = "Elite"
 	elif cell_type == GridTypes.CELL_BOSS:
 		mark_label.text = "Boss"
 	elif cell_type == GridTypes.CELL_CHEST:
-		mark_label.text = "箱\n%d" % int(cell_data.get("cost", Constants.NORMAL_CHEST_COST))
+		mark_label.text = "Box\n%d" % int(cell_data.get("cost", Constants.NORMAL_CHEST_COST))
 	elif cell_type == GridTypes.CELL_START:
-		mark_label.text = "起"
+		mark_label.text = "Start"
 	else:
 		mark_label.text = ""
 
 func _is_battle_room(cell_type: String) -> bool:
-	return cell_type == GridTypes.CELL_TASK or cell_type == GridTypes.CELL_ELITE or cell_type == GridTypes.CELL_BOSS
+	return cell_type == GridTypes.CELL_TASK or cell_type == GridTypes.CELL_SEARCH or cell_type == GridTypes.CELL_ELITE or cell_type == GridTypes.CELL_BOSS

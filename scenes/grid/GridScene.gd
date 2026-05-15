@@ -307,6 +307,8 @@ func _enter_battle_room(pos: Vector2i, cell_type: String) -> void:
 			message_label.text = "进入精英房。"
 		GridTypes.CELL_BOSS:
 			message_label.text = "进入 Boss 房。"
+		GridTypes.CELL_SEARCH:
+			message_label.text = "进入搜索房。"
 		_:
 			message_label.text = "进入任务点战斗。"
 	call_deferred("_emit_enter_battle_requested")
@@ -446,7 +448,7 @@ func _weapon_display_name(weapon_name: String) -> String:
 	return weapon_name
 
 func _is_battle_room(cell_type: String) -> bool:
-	return cell_type == GridTypes.CELL_TASK or cell_type == GridTypes.CELL_ELITE or cell_type == GridTypes.CELL_BOSS
+	return cell_type == GridTypes.CELL_TASK or cell_type == GridTypes.CELL_SEARCH or cell_type == GridTypes.CELL_ELITE or cell_type == GridTypes.CELL_BOSS
 
 func _is_inside(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.y >= 0 and pos.x < RunState.grid_size and pos.y < RunState.grid_size

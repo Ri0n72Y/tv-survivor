@@ -6,3 +6,5 @@ export_presets.cfg
 *.log
 *.uid
 /android/
+project_summary_*.md
+flatten-code.cjs

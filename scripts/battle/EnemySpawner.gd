@@ -20,6 +20,7 @@ var rng := RandomNumberGenerator.new()
 var difficulty_stage := 0
 var weapon_level_sum := 0
 var room_type := "task"
+var spawn_intensity := 1.0
 
 func setup(target_player: Node2D, parent: Node, signal_center: Vector2, signal_radius: float) -> void:
 	player = target_player
@@ -45,6 +46,8 @@ func set_difficulty(stage: int, weapon_sum: int) -> void:
 func set_room_type(value: String) -> void:
 	room_type = value
 
+func set_spawn_intensity(value: float) -> void:
+	spawn_intensity = maxf(0.1, value)
 
 func _process(delta: float) -> void:
 	if not running:
@@ -60,9 +63,10 @@ func _process(delta: float) -> void:
 		_spawn(SMALL_ENEMY_SCENE, _roll_small_enemy_tier())
 
 func _get_spawn_multiplier() -> float:
+	var multiplier := spawn_intensity
 	if difficulty_stage >= 1:
-		return Constants.FIRST_DIFFICULTY_SPAWN_MULTIPLIER
-	return 1.0
+		multiplier *= Constants.FIRST_DIFFICULTY_SPAWN_MULTIPLIER
+	return multiplier
 
 func _roll_small_enemy_tier() -> int:
 	if difficulty_stage <= 0:

@@ -91,6 +91,7 @@ static func generate_random(seed_value: int, config: Dictionary = {}) -> Array:
 		start_pos = Vector2i(0, size - 1)
 	var max_attempts := int(config.get("max_attempts", 100))
 	var task_count := int(config.get("task_count", Constants.TASK_COUNT))
+	var search_count := int(config.get("search_count", Constants.SEARCH_ROOM_COUNT))
 	var chest_count := int(config.get("chest_count", Constants.CHEST_COUNT))
 	var elite_count := int(config.get("elite_count", Constants.ELITE_ROOM_COUNT))
 	var boss_count := int(config.get("boss_count", Constants.BOSS_ROOM_COUNT))
@@ -106,6 +107,7 @@ static func generate_random(seed_value: int, config: Dictionary = {}) -> Array:
 
 		var target_positions: Array[Vector2i] = []
 		target_positions.append_array(_place_random_cells(grid, available, task_count, GridTypeDefs.CELL_TASK))
+		target_positions.append_array(_place_random_cells(grid, available, search_count, GridTypeDefs.CELL_SEARCH))
 		target_positions.append_array(_place_random_cells(grid, available, chest_count, GridTypeDefs.CELL_CHEST))
 		target_positions.append_array(_place_random_cells(grid, available, elite_count, GridTypeDefs.CELL_ELITE))
 		target_positions.append_array(_place_random_cells(grid, available, boss_count, GridTypeDefs.CELL_BOSS))
@@ -115,7 +117,7 @@ static func generate_random(seed_value: int, config: Dictionary = {}) -> Array:
 			_apply_initial_fog(grid, start_pos)
 			return grid
 
-	return _generate_random_fallback(seed_value, size, start_pos, task_count, chest_count, elite_count, boss_count)
+	return _generate_random_fallback(seed_value, size, start_pos, task_count, search_count, chest_count, elite_count, boss_count)
 
 static func _random_config(config: Dictionary) -> Dictionary:
 	var random_value = config.get("random", {})
@@ -149,6 +151,7 @@ static func _generate_random_fallback(
 	size: int,
 	start_pos: Vector2i,
 	task_count: int,
+	search_count: int,
 	chest_count: int,
 	elite_count: int,
 	boss_count: int
@@ -160,6 +163,7 @@ static func _generate_random_fallback(
 	var available := _all_positions_except(size, [start_pos])
 	_shuffle_positions(available, rng)
 	_place_random_cells(grid, available, task_count, GridTypeDefs.CELL_TASK)
+	_place_random_cells(grid, available, search_count, GridTypeDefs.CELL_SEARCH)
 	_place_random_cells(grid, available, chest_count, GridTypeDefs.CELL_CHEST)
 	_place_random_cells(grid, available, elite_count, GridTypeDefs.CELL_ELITE)
 	_place_random_cells(grid, available, boss_count, GridTypeDefs.CELL_BOSS)
@@ -275,6 +279,8 @@ static func _cell_type_from_symbol(symbol: String) -> String:
 			return GridTypeDefs.CELL_CHEST
 		"T":
 			return GridTypeDefs.CELL_TASK
+		"R":
+			return GridTypeDefs.CELL_SEARCH
 		"E":
 			return GridTypeDefs.CELL_ELITE
 		"B":
