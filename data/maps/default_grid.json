@@ -1,5 +1,5 @@
 {
-  "mode": "static",
+  "mode": "random",
   "size": 6,
   "start": [0, 5],
   "legend": {
@@ -25,7 +25,7 @@
     "start": [0, 5],
     "task_count": 3,
     "search_count": 1,
-    "chest_count": 3,
+    "chest_count": 5,
     "elite_count": 2,
     "boss_count": 1,
     "obstacle_count": 7,

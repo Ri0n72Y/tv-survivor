@@ -1,58 +1,42 @@
 extends CanvasLayer
 
-var sync_bar: ProgressBar
-var sync_label: Label
-var signal_label: Label
-var time_label: Label
-var score_label: Label
-var objective_label: Label
-var status_label: Label
-var weapon_label: Label
-var elite_bar: ProgressBar
-var elite_label: Label
-var guide_label: Label
+@onready var score_label: Label = $Root/StatusPanel/StatusBox/MainInfo/ScoreLabel
+@onready var time_label: Label = $Root/StatusPanel/StatusBox/MainInfo/TimeLabel
+@onready var objective_label: Label = $Root/StatusPanel/StatusBox/MainInfo/ObjectiveLabel
+@onready var status_label: Label = $Root/StatusPanel/StatusBox/MainInfo/StatusLabel
+@onready var sync_label: Label = $Root/StatusPanel/StatusBox/SyncInfo/SyncLabel
+@onready var sync_bar: ProgressBar = $Root/StatusPanel/StatusBox/SyncInfo/SyncBar
+@onready var signal_label: Label = $Root/StatusPanel/StatusBox/SyncInfo/SignalLabel
+@onready var weapon_label: Label = $Root/StatusPanel/StatusBox/BuildInfo/WeaponLabel
+@onready var elite_label: Label = $Root/StatusPanel/StatusBox/BuildInfo/EliteLabel
+@onready var elite_bar: ProgressBar = $Root/StatusPanel/StatusBox/BuildInfo/EliteBar
+@onready var guide_label: Label = $Root/GuidePanel/GuideLabel
+@onready var damage_feedback: Control = $Root/DamageFeedback
+@onready var damage_edges: Array[ColorRect] = [
+	$Root/DamageFeedback/TopEdge,
+	$Root/DamageFeedback/BottomEdge,
+	$Root/DamageFeedback/LeftEdge,
+	$Root/DamageFeedback/RightEdge,
+]
+
+var damage_pulse_left := 0.0
+var damage_pulse_duration := 0.32
+var damage_shake_left := 0.0
+var damage_shake_duration := 0.22
+var danger_ratio := 0.0
+var visual_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
-	var panel := Panel.new()
-	panel.position = Vector2(24, 18)
-	panel.size = Vector2(520, 310)
-	add_child(panel)
-	var box := VBoxContainer.new()
-	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	box.offset_left = 12
-	box.offset_top = 10
-	box.offset_right = -12
-	box.offset_bottom = -10
-	panel.add_child(box)
-	score_label = Label.new()
-	box.add_child(score_label)
-	objective_label = Label.new()
-	objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(objective_label)
-	status_label = Label.new()
-	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(status_label)
-	sync_label = Label.new()
-	box.add_child(sync_label)
-	sync_bar = ProgressBar.new()
-	box.add_child(sync_bar)
-	signal_label = Label.new()
-	box.add_child(signal_label)
-	time_label = Label.new()
-	box.add_child(time_label)
-	weapon_label = Label.new()
-	box.add_child(weapon_label)
-	guide_label = Label.new()
-	guide_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(guide_label)
-	elite_label = Label.new()
-	elite_label.text = "精英 / Boss 血量"
 	elite_label.visible = false
-	box.add_child(elite_label)
-	elite_bar = ProgressBar.new()
-	elite_bar.max_value = 100.0
 	elite_bar.visible = false
-	box.add_child(elite_bar)
+	elite_bar.max_value = 100.0
+	visual_rng.randomize()
+	_update_damage_feedback()
+
+func _process(delta: float) -> void:
+	damage_pulse_left = maxf(0.0, damage_pulse_left - delta)
+	damage_shake_left = maxf(0.0, damage_shake_left - delta)
+	_update_damage_feedback()
 
 func update_hud(
 	sync_rate: float,
@@ -75,6 +59,7 @@ func update_hud(
 	sync_bar.max_value = RunState.get_sync_max()
 	sync_bar.value = sync_rate
 	sync_label.text = "同步率：%.0f / %.0f" % [sync_rate, RunState.get_sync_max()]
+	_update_danger_ratio(sync_rate, RunState.get_sync_max(), uses_sync)
 	signal_label.text = signal_text
 	if signal_text.contains("弱"):
 		signal_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.2))
@@ -90,6 +75,42 @@ func update_hud(
 	elite_bar.visible = has_elite
 	if has_elite:
 		elite_bar.value = elite_ratio * 100.0
+
+func play_damage_feedback(_amount: float = 0.0) -> void:
+	damage_pulse_left = damage_pulse_duration
+	damage_shake_left = damage_shake_duration
+	_update_damage_feedback()
+
+func _update_danger_ratio(sync_rate: float, sync_max: float, uses_sync: bool) -> void:
+	if not uses_sync or sync_max <= 0.0:
+		danger_ratio = 0.0
+		return
+	var hp_ratio := clampf(sync_rate / sync_max, 0.0, 1.0)
+	danger_ratio = clampf((0.55 - hp_ratio) / 0.45, 0.0, 1.0)
+
+func _update_damage_feedback() -> void:
+	var pulse_ratio := 0.0
+	if damage_pulse_duration > 0.0:
+		pulse_ratio = clampf(damage_pulse_left / damage_pulse_duration, 0.0, 1.0)
+	var pulse_alpha := 0.62 * pulse_ratio * pulse_ratio
+	var danger_alpha := 0.42 * danger_ratio
+	var alpha := clampf(maxf(pulse_alpha, danger_alpha), 0.0, 0.78)
+	for edge in damage_edges:
+		edge.color = Color(0.86, 0.0, 0.0, alpha)
+	if alpha <= 0.01:
+		damage_feedback.visible = false
+		damage_feedback.position = Vector2.ZERO
+		return
+	damage_feedback.visible = true
+	if damage_shake_left > 0.0:
+		var shake_ratio := clampf(damage_shake_left / damage_shake_duration, 0.0, 1.0)
+		var shake_strength := 8.0 * shake_ratio
+		damage_feedback.position = Vector2(
+			visual_rng.randf_range(-shake_strength, shake_strength),
+			visual_rng.randf_range(-shake_strength, shake_strength)
+		)
+	else:
+		damage_feedback.position = Vector2.ZERO
 
 func _guide_text(uses_sync: bool, room_type: String) -> String:
 	match room_type:

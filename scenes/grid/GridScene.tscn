@@ -10,3 +10,137 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
+
+[node name="Root" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = 24.0
+offset_right = -32.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 28
+
+[node name="PlayColumn" type="VBoxContainer" parent="Root"]
+custom_minimum_size = Vector2(540, 0)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 14
+
+[node name="GridPanel" type="Panel" parent="Root/PlayColumn"]
+custom_minimum_size = Vector2(540, 540)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GridCenter" type="CenterContainer" parent="Root/PlayColumn/GridPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GridContainer" type="GridContainer" parent="Root/PlayColumn/GridPanel/GridCenter"]
+custom_minimum_size = Vector2(480, 480)
+layout_mode = 2
+
+[node name="RunControls" type="HBoxContainer" parent="Root/PlayColumn"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SeedLabel" type="Label" parent="Root/PlayColumn/RunControls"]
+custom_minimum_size = Vector2(68, 44)
+layout_mode = 2
+text = "地图种子"
+vertical_alignment = 1
+
+[node name="CurrentSeedLabel" type="Label" parent="Root/PlayColumn/RunControls"]
+custom_minimum_size = Vector2(120, 44)
+layout_mode = 2
+text = "当前：0"
+vertical_alignment = 1
+
+[node name="SeedInput" type="LineEdit" parent="Root/PlayColumn/RunControls"]
+custom_minimum_size = Vector2(130, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "留空随机"
+virtual_keyboard_type = 2
+
+[node name="SeedHintLabel" type="Label" parent="Root/PlayColumn/RunControls"]
+custom_minimum_size = Vector2(100, 44)
+layout_mode = 2
+text = "留空随机"
+vertical_alignment = 1
+
+[node name="RestartButton" type="Button" parent="Root/PlayColumn/RunControls"]
+custom_minimum_size = Vector2(150, 44)
+layout_mode = 2
+text = "重新开始"
+
+[node name="InfoColumn" type="VBoxContainer" parent="Root"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="TitleLabel" type="Label" parent="Root/InfoColumn"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "阵列探索验证"
+
+[node name="ProgressLabel" type="Label" parent="Root/InfoColumn"]
+layout_mode = 2
+
+[node name="WeaponLabel" type="Label" parent="Root/InfoColumn"]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="ScoreLabel" type="Label" parent="Root/InfoColumn"]
+layout_mode = 2
+
+[node name="GuideLabel" type="Label" parent="Root/InfoColumn"]
+layout_mode = 2
+text = "操作指南：阵列界面使用 WASD / 方向键移动；只能进入已揭示的相邻非障碍格。宝箱需要金币开启，战斗房会进入幸存者战斗。"
+autowrap_mode = 2
+
+[node name="MessageLabel" type="Label" parent="Root/InfoColumn"]
+layout_mode = 2
+text = "使用 WASD 或方向键移动到已揭示的相邻格。"
+autowrap_mode = 2
+
+[node name="VictoryPanel" type="Panel" parent="Root/InfoColumn"]
+visible = false
+custom_minimum_size = Vector2(520, 130)
+layout_mode = 2
+
+[node name="VictoryBox" type="VBoxContainer" parent="Root/InfoColumn/VictoryPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 12.0
+offset_right = -16.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VictoryLabel" type="Label" parent="Root/InfoColumn/VictoryPanel/VictoryBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Boss 已击败"
+
+[node name="VictoryDetail" type="Label" parent="Root/InfoColumn/VictoryPanel/VictoryBox"]
+layout_mode = 2
+
+[node name="VictoryRestartButton" type="Button" parent="Root/InfoColumn/VictoryPanel/VictoryBox"]
+layout_mode = 2
+text = "重新开始"

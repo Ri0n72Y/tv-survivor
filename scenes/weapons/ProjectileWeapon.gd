@@ -2,6 +2,7 @@ extends Node
 class_name ProjectileWeapon
 
 const Constants = preload("res://scripts/core/Constants.gd")
+const PROJECTILE_VIEW_SCENE := preload("res://scenes/weapons/ProjectileView.tscn")
 
 var player: Node2D
 var enemy_provider: Callable
@@ -36,7 +37,7 @@ func _fire_burst() -> void:
 		var target := _nearest_enemy()
 		if target == null:
 			return
-		var projectile := ProjectileView.new()
+		var projectile := PROJECTILE_VIEW_SCENE.instantiate()
 		player.get_parent().add_child(projectile)
 		projectile.setup(player.global_position, target, damage, Constants.PROJECTILE_SPEED)
 

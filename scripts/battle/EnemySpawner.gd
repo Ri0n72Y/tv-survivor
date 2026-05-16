@@ -4,6 +4,7 @@ class_name EnemySpawner
 signal enemy_spawned(enemy: Node)
 
 const Constants = preload("res://scripts/core/Constants.gd")
+const RunRngManagerScript = preload("res://scripts/core/RunRngManager.gd")
 const SMALL_ENEMY_SCENE := preload("res://scenes/enemies/SmallEnemy.tscn")
 const ELITE_ENEMY_SCENE := preload("res://scenes/enemies/EliteEnemy.tscn")
 const BOSS_ENEMY_SCENE := preload("res://scenes/enemies/BossEnemy.tscn")
@@ -16,9 +17,9 @@ var elapsed := 0.0
 var small_timer := 0.0
 var elite_spawned := false
 var running := false
-var rng := RandomNumberGenerator.new()
+var rng_stream: RunRngStream
 var difficulty_stage := 0
-var weapon_level_sum := 0
+var player_total_level := 0
 var room_type := "task"
 var spawn_intensity := 1.0
 
@@ -27,7 +28,7 @@ func setup(target_player: Node2D, parent: Node, signal_center: Vector2, signal_r
 	spawn_parent = parent
 	center = signal_center
 	radius = signal_radius
-	rng.randomize()
+	rng_stream = RunState.rng_stream(RunRngManagerScript.STREAM_BATTLE_SPAWN)
 
 func start() -> void:
 	running = true
@@ -39,9 +40,9 @@ func start() -> void:
 func stop() -> void:
 	running = false
 
-func set_difficulty(stage: int, weapon_sum: int) -> void:
+func set_difficulty(stage: int, total_level: int) -> void:
 	difficulty_stage = maxi(0, stage)
-	weapon_level_sum = maxi(0, weapon_sum)
+	player_total_level = maxi(0, total_level)
 
 func set_room_type(value: String) -> void:
 	room_type = value
@@ -63,18 +64,27 @@ func _process(delta: float) -> void:
 		_spawn(SMALL_ENEMY_SCENE, _roll_small_enemy_tier())
 
 func _get_spawn_multiplier() -> float:
-	var multiplier := spawn_intensity
-	if difficulty_stage >= 1:
-		multiplier *= Constants.FIRST_DIFFICULTY_SPAWN_MULTIPLIER
-	return multiplier
+	var stage_bonus := log(float(difficulty_stage) + 1.0) * Constants.DIFFICULTY_SPAWN_LOG_MULTIPLIER
+	var player_bonus := log(float(player_total_level) + 1.0) * Constants.PLAYER_LEVEL_SPAWN_LOG_MULTIPLIER
+	return spawn_intensity * (1.0 + stage_bonus + player_bonus)
 
 func _roll_small_enemy_tier() -> int:
 	if difficulty_stage <= 0:
 		return 0
-	var chance := Constants.SECOND_DIFFICULTY_SPAWN_CHANCE + float(weapon_level_sum) * Constants.WEAPON_LEVEL_SECOND_DIFFICULTY_CHANCE_BONUS
-	if difficulty_stage >= 2:
-		chance += 0.25
-	return 1 if rng.randf() < clampf(chance, 0.0, 0.85) else 0
+	var tier_pressure := difficulty_stage + _get_player_level_difficulty()
+	var tier_three_chance := clampf(float(tier_pressure - 5) * 0.06, 0.0, 0.18)
+	if rng_stream.chance(tier_three_chance):
+		return 3
+	var tier_two_chance := clampf(float(tier_pressure - 2) * 0.10, 0.0, 0.35)
+	if rng_stream.chance(tier_two_chance):
+		return 2
+	var tier_one_chance := clampf(Constants.SECOND_DIFFICULTY_SPAWN_CHANCE + float(tier_pressure) * Constants.WEAPON_LEVEL_SECOND_DIFFICULTY_CHANCE_BONUS, 0.0, 0.75)
+	return 1 if rng_stream.chance(tier_one_chance) else 0
+
+func _get_player_level_difficulty() -> int:
+	if player_total_level <= 1:
+		return 0
+	return int(floor(log(float(player_total_level)) / log(Constants.PLAYER_LEVEL_DIFFICULTY_LOG_BASE)))
 
 func _spawn_initial_room_enemy() -> void:
 	match room_type:
@@ -89,7 +99,7 @@ func _spawn(scene: PackedScene, enemy_tier: int) -> void:
 	if spawn_parent == null or not is_instance_valid(player):
 		return
 	var enemy := scene.instantiate()
-	var angle := rng.randf_range(0.0, TAU)
+	var angle := rng_stream.randf_range(0.0, TAU)
 	enemy.global_position = center + Vector2(cos(angle), sin(angle)) * radius
 	spawn_parent.add_child(enemy)
 	enemy.setup(player)

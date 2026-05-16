@@ -10,8 +10,10 @@ var direction := Vector2.RIGHT
 var projectile_color := Color(1.0, 0.86, 0.15)
 var projectile_radius := 5.0
 var has_hit := false
-var collision_shape: CollisionShape2D
-var circle_shape: CircleShape2D
+
+@onready var body: Polygon2D = $Body
+@onready var collision_shape: CollisionShape2D = $CollisionShape2D
+@onready var circle_shape: CircleShape2D = collision_shape.shape
 
 func _ready() -> void:
 	collision_layer = 0
@@ -19,7 +21,7 @@ func _ready() -> void:
 	monitoring = true
 	monitorable = false
 	area_entered.connect(_on_area_entered)
-	_ensure_collision_shape()
+	_sync_visuals()
 
 func setup(start_pos: Vector2, target_enemy: Node2D, projectile_damage: float, projectile_speed: float, color: Color = Color(1.0, 0.86, 0.15), radius: float = 5.0) -> void:
 	global_position = start_pos
@@ -27,7 +29,8 @@ func setup(start_pos: Vector2, target_enemy: Node2D, projectile_damage: float, p
 	speed = projectile_speed
 	projectile_color = color
 	projectile_radius = radius
-	_sync_collision_radius()
+	if is_node_ready():
+		_sync_visuals()
 	if is_instance_valid(target_enemy):
 		direction = global_position.direction_to(target_enemy.global_position)
 
@@ -39,7 +42,6 @@ func _physics_process(delta: float) -> void:
 	if has_hit:
 		return
 	global_position += direction * speed * delta
-	queue_redraw()
 
 func _on_area_entered(area: Area2D) -> void:
 	if has_hit or not area.has_method("take_damage"):
@@ -48,18 +50,17 @@ func _on_area_entered(area: Area2D) -> void:
 	area.take_damage(damage)
 	queue_free()
 
-func _ensure_collision_shape() -> void:
-	if collision_shape != null:
-		return
-	circle_shape = CircleShape2D.new()
-	collision_shape = CollisionShape2D.new()
-	collision_shape.shape = circle_shape
-	add_child(collision_shape)
-	_sync_collision_radius()
-
-func _sync_collision_radius() -> void:
+func _sync_visuals() -> void:
+	body.color = projectile_color
+	body.polygon = _circle_points(5.0, 32, false)
+	body.scale = Vector2.ONE * (projectile_radius / 5.0)
 	if circle_shape != null:
 		circle_shape.radius = projectile_radius
 
-func _draw() -> void:
-	draw_circle(Vector2.ZERO, projectile_radius, projectile_color)
+func _circle_points(radius: float, segments: int, close_loop: bool) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var count := segments + 1 if close_loop else segments
+	for i in range(count):
+		var angle := TAU * float(i % segments) / float(segments)
+		points.append(Vector2(cos(angle), sin(angle)) * radius)
+	return points

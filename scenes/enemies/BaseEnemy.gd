@@ -26,6 +26,8 @@ var damage_number_float_y := -34.0
 var damage_number_side_step := 10.0
 var damage_number_x_bias := 10.0
 
+@onready var body_shape: Polygon2D = $Body
+
 func configure_base_stats(base_hp: float, base_speed: float, base_damage: float, body_radius: float) -> void:
 	max_hp = base_hp
 	hp = max_hp
@@ -48,6 +50,7 @@ func setup(target_player: Node2D) -> void:
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
+	_sync_visuals()
 
 func _process(delta: float) -> void:
 	contact_timer = maxf(0.0, contact_timer - delta)
@@ -57,7 +60,7 @@ func _process(delta: float) -> void:
 		if overlapping_player and contact_timer <= 0.0:
 			contact_timer = BaseEnemyConstants.ENEMY_CONTACT_COOLDOWN
 			damaged_player.emit(damage)
-	queue_redraw()
+	_sync_visuals()
 
 func _on_body_entered(body: Node2D) -> void:
 	if body == player:
@@ -70,10 +73,11 @@ func _on_body_exited(body: Node2D) -> void:
 func configure_spawn_tier(level: int) -> void:
 	difficulty_tier = maxi(0, level)
 	var hp_multiplier := 1.0 + float(difficulty_tier) * BaseEnemyConstants.ENEMY_DIFFICULTY_HP_MULTIPLIER
-	var speed_multiplier := 1.0 + float(difficulty_tier) * BaseEnemyConstants.ENEMY_DIFFICULTY_SPEED_MULTIPLIER
 	max_hp *= hp_multiplier
 	hp = max_hp
-	speed *= speed_multiplier
+
+func get_drop_points(base_points: int) -> int:
+	return base_points + difficulty_tier * BaseEnemyConstants.ENEMY_TIER_DROP_BONUS
 
 func take_damage(amount: float) -> void:
 	_play_hit_feedback(amount)
@@ -85,14 +89,19 @@ func take_damage(amount: float) -> void:
 func get_hp_ratio() -> float:
 	return clampf(hp / max_hp, 0.0, 1.0)
 
-func _draw() -> void:
-	_draw_body_circle()
-
-func _draw_body_circle() -> void:
+func _sync_visuals() -> void:
 	var flash_ratio := hit_flash_timer / 0.12
-	var body_color := _get_body_color().lerp(Color.WHITE, clampf(flash_ratio, 0.0, 1.0))
+	body_shape.color = _get_body_color().lerp(Color.WHITE, clampf(flash_ratio, 0.0, 1.0))
 	var draw_radius := radius + 2.0 * clampf(flash_ratio, 0.0, 1.0)
-	draw_circle(Vector2.ZERO, draw_radius, body_color)
+	body_shape.polygon = _circle_points(draw_radius, 64, false)
+
+func _circle_points(point_radius: float, segments: int, close_loop: bool) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var count := segments + 1 if close_loop else segments
+	for i in range(count):
+		var angle := TAU * float(i % segments) / float(segments)
+		points.append(Vector2(cos(angle), sin(angle)) * point_radius)
+	return points
 
 func _play_hit_feedback(amount: float) -> void:
 	hit_flash_timer = 0.12
@@ -128,4 +137,4 @@ func _format_damage(amount: float) -> String:
 	return "%.1f" % amount
 
 func _get_body_color() -> Color:
-	return Color(1.0, 0.45, 0.32).lerp(Color(0.55, 0.0, 0.0), clampf(float(difficulty_tier) / 2.0, 0.0, 1.0))
+	return Color(1.0, 0.45, 0.32).lerp(Color(0.45, 0.0, 0.0), clampf(float(difficulty_tier) / 5.0, 0.0, 1.0))

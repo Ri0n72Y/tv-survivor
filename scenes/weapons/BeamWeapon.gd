@@ -11,26 +11,32 @@ var level := 0
 var tick_timer := 0.0
 var locked_target: Node2D
 
+@onready var beam_line: Line2D = $BeamLine
+@onready var core_line: Line2D = $CoreLine
+
 func setup(target_player: Node2D, enemies_callable: Callable, weapon_level: int) -> void:
 	player = target_player
 	enemy_provider = enemies_callable
 	level = clampi(weapon_level, 0, 3)
 	tick_timer = 0.0
+	if is_node_ready():
+		_update_visual()
 
 func _process(delta: float) -> void:
 	if level <= 0 or not is_instance_valid(player):
+		_update_visual()
 		return
 	global_position = player.global_position
 	if not _target_is_alive():
 		locked_target = _find_target()
 	if not _target_is_alive():
-		queue_redraw()
+		_update_visual()
 		return
 	tick_timer -= delta
 	if tick_timer <= 0.0:
 		tick_timer = float(Constants.BEAM_TICK_LV[level]) * RunState.get_cooldown_multiplier()
 		_damage_enemies_on_beam_path()
-	queue_redraw()
+	_update_visual()
 
 func _find_target() -> Node2D:
 	var best_target: Node2D = null
@@ -81,9 +87,14 @@ func _distance_squared_to_segment(point: Vector2, start_pos: Vector2, end_pos: V
 	var closest_point := start_pos + segment * t
 	return point.distance_squared_to(closest_point)
 
-func _draw() -> void:
+func _update_visual() -> void:
 	if not _target_is_alive():
+		beam_line.visible = false
+		core_line.visible = false
 		return
 	var end_pos := locked_target.global_position - global_position
-	draw_line(Vector2.ZERO, end_pos, Color(0.95, 0.92, 0.62, 0.85), 4.0)
-	draw_line(Vector2.ZERO, end_pos, Color(1.0, 1.0, 1.0, 0.65), 1.5)
+	var points := PackedVector2Array([Vector2.ZERO, end_pos])
+	beam_line.visible = true
+	core_line.visible = true
+	beam_line.points = points
+	core_line.points = points

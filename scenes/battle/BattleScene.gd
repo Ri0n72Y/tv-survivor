@@ -4,12 +4,17 @@ signal battle_finished(success: bool, final_sync_rate: float)
 signal restart_requested
 
 const Constants = preload("res://scripts/core/Constants.gd")
+const RunRngManagerScript = preload("res://scripts/core/RunRngManager.gd")
 const SIGNAL_AREA_SCENE := preload("res://scenes/battle/SignalArea.tscn")
 const PLAYER_SCENE := preload("res://scenes/battle/PlayerAvatar.tscn")
 const HUD_SCENE := preload("res://scenes/ui/BattleHud.tscn")
 const REWARD_OVERLAY_SCENE := preload("res://scenes/ui/RewardOverlay.tscn")
 const WEAPON_MANAGER_SCENE := preload("res://scenes/weapons/WeaponManager.tscn")
-const COLLECTIBLE_DROP_SCENE := preload("res://scenes/battle/CollectibleDrop.gd")
+const COLLECTIBLE_DROP_SCENE := preload("res://scenes/battle/CollectibleDrop.tscn")
+const ARENA_BOUNDARY_SCENE := preload("res://scenes/battle/ArenaBoundary.tscn")
+const BATTLE_ALTAR_SCENE := preload("res://scenes/battle/BattleAltar.tscn")
+const BATTLE_CHEST_SCENE := preload("res://scenes/battle/BattleChest.tscn")
+const EXTRACTION_POINT_SCENE := preload("res://scenes/battle/ExtractionPoint.tscn")
 const ELITE_ENEMY_SCENE := preload("res://scenes/enemies/EliteEnemy.tscn")
 const WEAPON_IDS: Array[String] = ["projectile", "aura", "shape", "beam"]
 
@@ -35,7 +40,6 @@ var difficulty_stage := 0
 var elite_escalation_bonus := 0
 var battle_room_type := GridTypes.CELL_TASK
 var room_rules: Dictionary = {}
-var rng := RandomNumberGenerator.new()
 
 var search_challenge_active := false
 var search_challenge_completed := false
@@ -50,9 +54,11 @@ var search_elite_spawned := false
 var room_status_text := ""
 var pending_reward_chest: BattleChest
 var pending_finish_after_reward := false
+var player_hit_invulnerability_seconds := Constants.PLAYER_HIT_INVULNERABILITY_SECONDS
+var player_hit_invulnerability_left := 0.0
 
 func _ready() -> void:
-	rng.randomize()
+	RunState.ensure_rng_started()
 	RunState.begin_battle()
 	battle_room_type = RunState.current_battle_room_type if RunState.current_battle_room_type != "" else GridTypes.CELL_TASK
 	room_rules = RoomRules.for_room_type(battle_room_type)
@@ -65,6 +71,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if finished:
 		return
+	player_hit_invulnerability_left = maxf(0.0, player_hit_invulnerability_left - delta)
 	if reward_overlay != null and reward_overlay.visible:
 		return
 	if Input.is_key_pressed(KEY_R):
@@ -94,16 +101,12 @@ func _process(delta: float) -> void:
 		_finish(false)
 
 func _build_scene() -> void:
-	var background := ColorRect.new()
-	background.color = Color(0.045, 0.05, 0.07)
-	background.size = Vector2(Constants.SCREEN_WIDTH, Constants.SCREEN_HEIGHT)
-	add_child(background)
 	if bool(room_rules.get(RoomRules.SHOW_SIGNAL_AREA, true)):
 		var signal_area := SIGNAL_AREA_SCENE.instantiate()
 		signal_area.global_position = signal_center
 		add_child(signal_area)
 	if bool(room_rules.get(RoomRules.EDGE_IS_WALL, false)):
-		var boundary := ArenaBoundary.new()
+		var boundary := ARENA_BOUNDARY_SCENE.instantiate()
 		add_child(boundary)
 		boundary.setup(Rect2(Vector2.ZERO, Vector2(Constants.SCREEN_WIDTH, Constants.SCREEN_HEIGHT)))
 	player = PLAYER_SCENE.instantiate()
@@ -126,10 +129,10 @@ func _build_scene() -> void:
 	_build_reward_overlay()
 
 func _build_search_objects() -> void:
-	altar = BattleAltar.new()
+	altar = BATTLE_ALTAR_SCENE.instantiate()
 	add_child(altar)
 	altar.setup(signal_center)
-	extraction_point = ExtractionPoint.new()
+	extraction_point = EXTRACTION_POINT_SCENE.instantiate()
 	add_child(extraction_point)
 	extraction_point.setup(signal_center, Constants.EXTRACTION_RADIUS)
 	room_status_text = "探索房：宝箱每 10 秒出现，刷完 3 个后祭坛出现。"
@@ -174,8 +177,8 @@ func _update_search_room(delta: float) -> void:
 			search_extraction_hold = minf(Constants.EXTRACTION_COUNTDOWN, search_extraction_hold + delta)
 			room_status_text = "撤离中：%.1f" % (Constants.EXTRACTION_COUNTDOWN - search_extraction_hold)
 		else:
-			search_extraction_hold = 0.0
-			room_status_text = "撤离已开放：在祭坛圈内停留 3 秒。"
+			search_extraction_hold = maxf(0.0, search_extraction_hold - delta)
+			room_status_text = "撤离已开放：回到祭坛圈内继续读条。"
 		altar.set_hold_ratio(search_extraction_hold / Constants.EXTRACTION_COUNTDOWN)
 		extraction_point.set_hold_ratio(search_extraction_hold / Constants.EXTRACTION_COUNTDOWN)
 		if search_extraction_hold >= Constants.EXTRACTION_COUNTDOWN:
@@ -208,12 +211,15 @@ func _spawn_search_chest() -> void:
 		signal_center + Vector2(120, 95),
 	]
 	var index := search_chests_spawned % positions.size()
-	var chest := BattleChest.new()
+	var chest := BATTLE_CHEST_SCENE.instantiate()
 	add_child(chest)
-	chest.setup(positions[index], Constants.NORMAL_CHEST_COST)
+	chest.setup(positions[index], _get_search_chest_cost())
 	battle_chests.append(chest)
 	search_chests_spawned += 1
 	room_status_text = "战斗宝箱出现：靠近自动打开。"
+
+func _get_search_chest_cost() -> int:
+	return Constants.NORMAL_CHEST_COST
 
 func _make_altar_available() -> void:
 	if search_altar_available:
@@ -229,8 +235,8 @@ func _update_altar_activation(delta: float) -> void:
 		search_altar_hold = minf(Constants.ALTAR_HOLD_SECONDS, search_altar_hold + delta)
 		room_status_text = "祭坛激活中：%.1f" % (Constants.ALTAR_HOLD_SECONDS - search_altar_hold)
 	else:
-		search_altar_hold = 0.0
-		room_status_text = "祭坛出现：在中心圈内停留 3 秒激活。"
+		search_altar_hold = maxf(0.0, search_altar_hold - delta)
+		room_status_text = "祭坛出现：在中心圈内继续读条激活。"
 	altar.set_hold_ratio(search_altar_hold / Constants.ALTAR_HOLD_SECONDS)
 	if search_altar_hold >= Constants.ALTAR_HOLD_SECONDS:
 		_activate_altar()
@@ -251,10 +257,10 @@ func _update_difficulty() -> void:
 		next_stage += 2
 	if next_stage != difficulty_stage:
 		difficulty_stage = next_stage
-	spawner.set_difficulty(difficulty_stage, _get_weapon_level_sum())
+	spawner.set_difficulty(difficulty_stage, RunState.get_total_upgrade_level())
 
-func _get_weapon_level_sum() -> int:
-	return RunState.get_weapon_level("projectile") + RunState.get_weapon_level("aura") + RunState.get_weapon_level("shape") + RunState.get_weapon_level("beam")
+func _get_player_total_level() -> int:
+	return RunState.get_total_upgrade_level()
 
 func _update_sync(delta: float) -> void:
 	var distance := player.global_position.distance_to(signal_center)
@@ -288,7 +294,7 @@ func _get_phase_text() -> String:
 	var room_label := "任务"
 	if battle_room_type == GridTypes.CELL_ELITE:
 		room_label = "精英房"
-	return "%s剩余：%.1f  难度阶段：%d（武器等级和：%d）" % [room_label, task_time_left, difficulty_stage, _get_weapon_level_sum()]
+	return "%s剩余：%.1f  难度阶段：%d（总等级：%d）" % [room_label, task_time_left, difficulty_stage, _get_player_total_level()]
 
 func _get_objective_text() -> String:
 	match battle_room_type:
@@ -311,10 +317,11 @@ func _try_open_battle_chest(chest: BattleChest) -> void:
 	if _build_reward_pool().is_empty():
 		room_status_text = "没有可用奖励。"
 		return
-	if RunState.gold < Constants.NORMAL_CHEST_COST:
-		room_status_text = "金币不足：打开战斗宝箱需要 %d 金币。" % Constants.NORMAL_CHEST_COST
+	var cost := chest.cost
+	if RunState.gold < cost:
+		room_status_text = "金币不足：打开战斗宝箱需要 %d 金币。" % cost
 		return
-	RunState.gold -= Constants.NORMAL_CHEST_COST
+	RunState.gold -= cost
 	chest.mark_opened()
 	pending_reward_chest = chest
 	_show_reward_choices("战斗宝箱", false)
@@ -374,6 +381,8 @@ func _on_enemy_died(enemy: Node) -> void:
 		drop_points = Constants.BOSS_GOLD
 	elif is_elite:
 		drop_points = Constants.SCORE_ELITE_DROP
+	if enemy.has_method("get_drop_points"):
+		drop_points = enemy.get_drop_points(drop_points)
 	_spawn_drop(enemy.global_position, drop_points)
 	enemies.erase(enemy)
 	if is_boss:
@@ -392,7 +401,7 @@ func _on_enemy_died(enemy: Node) -> void:
 			_start_extraction()
 
 func _spawn_drop(drop_position: Vector2, points: int) -> void:
-	var drop := COLLECTIBLE_DROP_SCENE.new()
+	var drop := COLLECTIBLE_DROP_SCENE.instantiate()
 	drop.global_position = drop_position
 	add_child(drop)
 	drop.setup(points, player)
@@ -419,8 +428,15 @@ func _start_extraction() -> void:
 	spawner.stop()
 
 func _on_player_damaged(amount: float) -> void:
+	if player_hit_invulnerability_left > 0.0:
+		return
+	player_hit_invulnerability_left = player_hit_invulnerability_seconds
+	if player != null and player.has_method("play_hit_feedback"):
+		player.play_hit_feedback(player_hit_invulnerability_seconds)
 	if _uses_sync():
 		sync_controller.apply_damage(amount)
+	if hud != null and hud.has_method("play_damage_feedback"):
+		hud.play_damage_feedback(amount)
 
 func _show_reward_choices(title: String, free_reward: bool) -> void:
 	var choices := _roll_reward_choices()
@@ -431,13 +447,27 @@ func _show_reward_choices(title: String, free_reward: bool) -> void:
 			_finish(true)
 		return
 	get_tree().paused = true
-	var status := "免费奖励" if free_reward else "已消耗 %d 金币" % Constants.NORMAL_CHEST_COST
+	var status := "免费奖励" if free_reward else "已消耗 %d 金币" % _get_pending_reward_cost()
 	reward_overlay.show_choices(title, status, choices)
+
+func _get_pending_reward_cost() -> int:
+	if pending_reward_chest != null and is_instance_valid(pending_reward_chest):
+		return pending_reward_chest.cost
+	return Constants.NORMAL_CHEST_COST
 
 func _roll_reward_choices() -> Array[Dictionary]:
 	var choices := _build_reward_pool()
-	choices.shuffle()
-	return choices.slice(0, mini(3, choices.size()))
+	var stream_name := RunRngManagerScript.STREAM_CHEST_REWARD
+	if pending_finish_after_reward:
+		stream_name = RunRngManagerScript.STREAM_WEAPON_REWARD
+	var drawn := RandomPool.draw(RunState.rng_stream(stream_name), choices, {
+		"count": mini(3, choices.size()),
+		"allow_repeats": false,
+	})
+	var result: Array[Dictionary] = []
+	for choice in drawn:
+		result.append(choice as Dictionary)
+	return result
 
 func _build_reward_pool() -> Array[Dictionary]:
 	var pool: Array[Dictionary] = []
@@ -457,17 +487,23 @@ func _build_reward_pool() -> Array[Dictionary]:
 
 func _weapon_reward(weapon_id: String, level: int, prefix: String) -> Dictionary:
 	return {
+		"id": "weapon:%s:%d" % [weapon_id, level],
 		"kind": "weapon",
 		"weapon_id": weapon_id,
 		"level": level,
+		"weight": 1.0,
+		"tags": ["weapon", weapon_id],
 		"label": "%s\n%s Lv.%d" % [prefix, _weapon_display_name(weapon_id), level],
 	}
 
 func _passive_reward(passive_id: String, level: int, prefix: String) -> Dictionary:
 	return {
+		"id": "passive:%s:%d" % [passive_id, level],
 		"kind": "passive",
 		"passive_id": passive_id,
 		"level": level,
+		"weight": 1.0,
+		"tags": ["passive", passive_id],
 		"label": "%s\n%s Lv.%d\n%s" % [prefix, _passive_display_name(passive_id), level, _passive_stats_text(passive_id, level)],
 	}
 

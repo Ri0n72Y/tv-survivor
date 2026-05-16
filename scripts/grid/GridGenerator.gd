@@ -3,19 +3,20 @@ class_name GridGenerator
 
 const Constants = preload("res://scripts/core/Constants.gd")
 const GridTypeDefs = preload("res://scripts/grid/GridTypes.gd")
+const RunRngManagerScript = preload("res://scripts/core/RunRngManager.gd")
 
 const DEFAULT_MAP_PATH := "res://data/maps/default_grid.json"
 const START_POS := Vector2i(0, 5)
 
-static func generate(seed_value: int, config_path: String = DEFAULT_MAP_PATH) -> Array:
+static func generate(seed_value: int, config_path: String = DEFAULT_MAP_PATH, rng_manager: RunRngManager = null) -> Array:
 	var config := load_map_config(config_path)
 	if String(config.get("mode", "static")) == "random":
-		return generate_random(seed_value, _random_config(config))
+		return generate_random(seed_value, _random_config(config), rng_manager)
 
 	var grid := generate_from_config(config)
 	if not grid.is_empty():
 		return grid
-	return generate_random(seed_value, _random_config(config))
+	return generate_random(seed_value, _random_config(config), rng_manager)
 
 static func load_map_config(config_path: String) -> Dictionary:
 	if not FileAccess.file_exists(config_path):
@@ -84,7 +85,7 @@ static func generate_from_config(config: Dictionary) -> Array:
 	_apply_initial_fog(grid, start_pos)
 	return grid
 
-static func generate_random(seed_value: int, config: Dictionary = {}) -> Array:
+static func generate_random(seed_value: int, config: Dictionary = {}, rng_manager: RunRngManager = null) -> Array:
 	var size := maxi(1, int(config.get("size", Constants.GRID_SIZE)))
 	var start_pos := _read_vector2i(config.get("start", [START_POS.x, START_POS.y]), START_POS)
 	if not _is_inside(start_pos, size):
@@ -97,13 +98,12 @@ static func generate_random(seed_value: int, config: Dictionary = {}) -> Array:
 	var boss_count := int(config.get("boss_count", Constants.BOSS_ROOM_COUNT))
 	var obstacle_count := int(config.get("obstacle_count", Constants.OBSTACLE_COUNT))
 
-	var rng := RandomNumberGenerator.new()
+	var map_stream := _stream_for(seed_value, rng_manager, RunRngManagerScript.STREAM_MAP_ROUTE)
 	for attempt in range(max_attempts):
-		rng.seed = seed_value + attempt
 		var grid := _new_empty_grid(size)
 		_set_cell_type(grid, start_pos, GridTypeDefs.CELL_START)
 		var available := _all_positions_except(size, [start_pos])
-		_shuffle_positions(available, rng)
+		_shuffle_positions(available, map_stream)
 
 		var target_positions: Array[Vector2i] = []
 		target_positions.append_array(_place_random_cells(grid, available, task_count, GridTypeDefs.CELL_TASK))
@@ -117,7 +117,7 @@ static func generate_random(seed_value: int, config: Dictionary = {}) -> Array:
 			_apply_initial_fog(grid, start_pos)
 			return grid
 
-	return _generate_random_fallback(seed_value, size, start_pos, task_count, search_count, chest_count, elite_count, boss_count)
+	return _generate_random_fallback(seed_value, size, start_pos, task_count, search_count, chest_count, elite_count, boss_count, rng_manager)
 
 static func _random_config(config: Dictionary) -> Dictionary:
 	var random_value = config.get("random", {})
@@ -154,14 +154,14 @@ static func _generate_random_fallback(
 	search_count: int,
 	chest_count: int,
 	elite_count: int,
-	boss_count: int
+	boss_count: int,
+	rng_manager: RunRngManager = null
 ) -> Array:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_value
+	var map_stream := _stream_for(seed_value, rng_manager, RunRngManagerScript.STREAM_MAP_ROUTE)
 	var grid := _new_empty_grid(size)
 	_set_cell_type(grid, start_pos, GridTypeDefs.CELL_START)
 	var available := _all_positions_except(size, [start_pos])
-	_shuffle_positions(available, rng)
+	_shuffle_positions(available, map_stream)
 	_place_random_cells(grid, available, task_count, GridTypeDefs.CELL_TASK)
 	_place_random_cells(grid, available, search_count, GridTypeDefs.CELL_SEARCH)
 	_place_random_cells(grid, available, chest_count, GridTypeDefs.CELL_CHEST)
@@ -188,7 +188,7 @@ static func _all_positions_except(size: int, excluded: Array) -> Array[Vector2i]
 				positions.append(pos)
 	return positions
 
-static func _shuffle_positions(positions: Array[Vector2i], rng: RandomNumberGenerator) -> void:
+static func _shuffle_positions(positions: Array[Vector2i], rng: RunRngStream) -> void:
 	for i in range(positions.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
 		var tmp := positions[i]
@@ -296,3 +296,10 @@ static func _read_vector2i(value, fallback: Vector2i) -> Vector2i:
 
 static func _is_inside(pos: Vector2i, size: int) -> bool:
 	return pos.x >= 0 and pos.y >= 0 and pos.x < size and pos.y < size
+
+static func _stream_for(seed_value: int, rng_manager: RunRngManager, stream_name: String) -> RunRngStream:
+	if rng_manager != null:
+		return rng_manager.get_stream(stream_name)
+	var temp_manager := RunRngManagerScript.new()
+	temp_manager.start_run(seed_value)
+	return temp_manager.get_stream(stream_name)

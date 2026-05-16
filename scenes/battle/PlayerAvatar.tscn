@@ -9,5 +9,25 @@ radius = 14.0
 collision_mask = 2
 script = ExtResource("1")
 
+[node name="Body" type="Polygon2D" parent="."]
+color = Color(0, 0.78, 0.9, 1)
+polygon = PackedVector2Array(14, 0, 9.8995, 9.8995, 0, 14, -9.8995, 9.8995, -14, 0, -9.8995, -9.8995, 0, -14, 9.8995, -9.8995)
+
+[node name="Outline" type="Line2D" parent="."]
+points = PackedVector2Array(14, 0, 9.8995, 9.8995, 0, 14, -9.8995, 9.8995, -14, 0, -9.8995, -9.8995, 0, -14, 9.8995, -9.8995, 14, 0)
+width = 2.0
+default_color = Color(1, 1, 1, 1)
+closed = true
+antialiased = true
+
+[node name="HitEffect" type="Node2D" parent="."]
+visible = false
+
+[node name="Ring" type="Line2D" parent="HitEffect"]
+width = 5.0
+default_color = Color(1, 0.18, 0.12, 0.9)
+closed = true
+antialiased = true
+
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("1")

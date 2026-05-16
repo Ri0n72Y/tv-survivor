@@ -1,6 +1,9 @@
 extends Node2D
 class_name WeaponManager
 
+const AURA_WEAPON_SCENE := preload("res://scenes/weapons/AuraWeapon.tscn")
+const BEAM_WEAPON_SCENE := preload("res://scenes/weapons/BeamWeapon.tscn")
+
 var player: Node2D
 var enemy_provider: Callable
 
@@ -18,7 +21,7 @@ func _start_weapons() -> void:
 	for child in get_children():
 		child.queue_free()
 	if RunState.get_weapon_level("aura") > 0:
-		var aura := AuraWeapon.new()
+		var aura := AURA_WEAPON_SCENE.instantiate()
 		add_child(aura)
 		aura.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("aura"))
 	if RunState.get_weapon_level("projectile") > 0:
@@ -30,7 +33,7 @@ func _start_weapons() -> void:
 		add_child(shape)
 		shape.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("shape"))
 	if RunState.get_weapon_level("beam") > 0:
-		var beam := BeamWeapon.new()
+		var beam := BEAM_WEAPON_SCENE.instantiate()
 		add_child(beam)
 		beam.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("beam"))
 

@@ -2,6 +2,7 @@ extends Node
 class_name ShapeWeapon
 
 const Constants = preload("res://scripts/core/Constants.gd")
+const SHAPE_HITBOX_VIEW_SCENE := preload("res://scenes/weapons/ShapeHitboxView.tscn")
 
 var player: Node2D
 var enemy_provider: Callable
@@ -34,7 +35,7 @@ func _trigger() -> void:
 		_damage_in_rect(direction.normalized(), length, width, damage)
 
 func _spawn_view(direction: Vector2, length: float, width: float) -> void:
-	var view := ShapeHitboxView.new()
+	var view := SHAPE_HITBOX_VIEW_SCENE.instantiate()
 	player.get_parent().add_child(view)
 	view.setup(player.global_position, direction, length, width, Constants.SHAPE_DURATION)
 

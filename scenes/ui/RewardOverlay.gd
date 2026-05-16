@@ -3,18 +3,18 @@ class_name RewardOverlay
 
 signal reward_selected(choice: Dictionary)
 
-var title_label: Label
-var status_label: Label
-var cards_box: HBoxContainer
 var buttons: Array[Button] = []
 var choices: Array[Dictionary] = []
 var selected_index := 0
+
+@onready var title_label: Label = $Root/Center/Panel/Box/TitleLabel
+@onready var status_label: Label = $Root/Center/Panel/Box/StatusLabel
+@onready var cards_box: HBoxContainer = $Root/Center/Panel/Box/CardsBox
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 	visible = false
 	layer = 100
-	_build_ui()
 
 func show_choices(title: String, status: String, reward_choices: Array[Dictionary]) -> void:
 	choices = reward_choices
@@ -43,51 +43,6 @@ func _input(event: InputEvent) -> void:
 		KEY_SPACE, KEY_ENTER:
 			_confirm_selection()
 			get_viewport().set_input_as_handled()
-
-func _build_ui() -> void:
-	var root := Control.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(root)
-
-	var shade := ColorRect.new()
-	shade.color = Color(0.0, 0.0, 0.0, 0.78)
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.add_child(shade)
-
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	center.offset_left = 48
-	center.offset_top = 48
-	center.offset_right = -48
-	center.offset_bottom = -48
-	root.add_child(center)
-
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(900, 360)
-	center.add_child(panel)
-
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 16)
-	panel.add_child(box)
-
-	title_label = Label.new()
-	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_label.add_theme_font_size_override("font_size", 28)
-	box.add_child(title_label)
-
-	status_label = Label.new()
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(status_label)
-
-	cards_box = HBoxContainer.new()
-	cards_box.add_theme_constant_override("separation", 16)
-	box.add_child(cards_box)
-
-	var hint := Label.new()
-	hint.text = "WASD / 方向键选择，空格 / 回车确认"
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(hint)
 
 func _rebuild_cards() -> void:
 	for child in cards_box.get_children():
