@@ -88,5 +88,5 @@ const ALTAR_HOLD_SECONDS := 3.0
 const EXTRACTION_RADIUS := 70.0
 
 const BASE_WEAPON_SLOTS := 4
-const BASE_PASSIVE_SLOTS := 6
+const BASE_PASSIVE_SLOTS := 4
 const BASE_WEAPON_ID := "projectile"

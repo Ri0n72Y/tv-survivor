@@ -20,9 +20,9 @@ func _physics_process(_delta: float) -> void:
 			input_vector.y -= 1.0
 		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
 			input_vector.y += 1.0
-		velocity = input_vector.normalized() * Constants.PLAYER_SPEED
+		velocity = input_vector.normalized() * Constants.PLAYER_SPEED * RunState.get_move_speed_multiplier()
 	else:
-		velocity = global_position.direction_to(signal_center) * Constants.PLAYER_SPEED
+		velocity = global_position.direction_to(signal_center) * Constants.PLAYER_SPEED * RunState.get_move_speed_multiplier()
 	move_and_slide()
 	if arena_bounds_enabled:
 		global_position.x = clampf(global_position.x, arena_rect.position.x + arena_margin, arena_rect.end.x - arena_margin)

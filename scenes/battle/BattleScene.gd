@@ -308,6 +308,9 @@ func _get_objective_text() -> String:
 			return "目标：存活 30 秒并完成撤离"
 
 func _try_open_battle_chest(chest: BattleChest) -> void:
+	if _build_reward_pool().is_empty():
+		room_status_text = "没有可用奖励。"
+		return
 	if RunState.gold < Constants.NORMAL_CHEST_COST:
 		room_status_text = "金币不足：打开战斗宝箱需要 %d 金币。" % Constants.NORMAL_CHEST_COST
 		return
@@ -398,8 +401,9 @@ func _spawn_drop(drop_position: Vector2, points: int) -> void:
 
 func _on_drop_collected(drop: Node, points: int) -> void:
 	drops.erase(drop)
-	RunState.gold += points
-	RunState.total_score += points
+	var earned := RunState.apply_gold_gain(points)
+	RunState.gold += earned
+	RunState.total_score += earned
 
 func _collect_all_drops() -> void:
 	for drop in drops.duplicate():
@@ -419,27 +423,37 @@ func _on_player_damaged(amount: float) -> void:
 		sync_controller.apply_damage(amount)
 
 func _show_reward_choices(title: String, free_reward: bool) -> void:
+	var choices := _roll_reward_choices()
+	if choices.is_empty():
+		room_status_text = "没有可用奖励。"
+		if pending_finish_after_reward:
+			pending_finish_after_reward = false
+			_finish(true)
+		return
 	get_tree().paused = true
 	var status := "免费奖励" if free_reward else "已消耗 %d 金币" % Constants.NORMAL_CHEST_COST
-	reward_overlay.show_choices(title, status, _roll_reward_choices())
+	reward_overlay.show_choices(title, status, choices)
 
 func _roll_reward_choices() -> Array[Dictionary]:
-	var choices: Array[Dictionary] = []
-	var existing_upgrades := _upgradable_existing_weapons()
-	if not existing_upgrades.is_empty():
-		var weapon_id := String(existing_upgrades[rng.randi_range(0, existing_upgrades.size() - 1)])
-		choices.append(_weapon_reward(weapon_id, RunState.get_weapon_level(weapon_id) + 1, "升级"))
-	var new_weapons := _available_new_weapons()
-	if not new_weapons.is_empty():
-		var weapon_id := String(new_weapons[rng.randi_range(0, new_weapons.size() - 1)])
-		choices.append(_weapon_reward(weapon_id, 1, "新武器"))
-	if _uses_sync():
-		choices.append({"kind": "sync", "value": 30, "label": "同步恢复\n+30 同步率"})
-	choices.append({"kind": "gold", "value": 20, "label": "金币返还\n+20 金币"})
-	while choices.size() < 3:
-		choices.append({"kind": "gold", "value": 15, "label": "金币返还\n+15 金币"})
+	var choices := _build_reward_pool()
 	choices.shuffle()
-	return choices.slice(0, 3)
+	return choices.slice(0, mini(3, choices.size()))
+
+func _build_reward_pool() -> Array[Dictionary]:
+	var pool: Array[Dictionary] = []
+	for weapon_id in WEAPON_IDS:
+		var weapon_level := RunState.get_weapon_level(weapon_id)
+		if weapon_level > 0 and weapon_level < 3:
+			pool.append(_weapon_reward(weapon_id, weapon_level + 1, "升级武器"))
+		elif weapon_level <= 0 and RunState.get_weapon_count() < RunState.weapon_slots:
+			pool.append(_weapon_reward(weapon_id, 1, "新武器"))
+	for passive_id in RunState.PASSIVE_IDS:
+		var passive_level := RunState.get_passive_level(passive_id)
+		if passive_level > 0 and passive_level < 3:
+			pool.append(_passive_reward(passive_id, passive_level + 1, "升级被动"))
+		elif passive_level <= 0 and RunState.get_passive_count() < RunState.passive_slots:
+			pool.append(_passive_reward(passive_id, 1, "新被动"))
+	return pool
 
 func _weapon_reward(weapon_id: String, level: int, prefix: String) -> Dictionary:
 	return {
@@ -449,6 +463,14 @@ func _weapon_reward(weapon_id: String, level: int, prefix: String) -> Dictionary
 		"label": "%s\n%s Lv.%d" % [prefix, _weapon_display_name(weapon_id), level],
 	}
 
+func _passive_reward(passive_id: String, level: int, prefix: String) -> Dictionary:
+	return {
+		"kind": "passive",
+		"passive_id": passive_id,
+		"level": level,
+		"label": "%s\n%s Lv.%d\n%s" % [prefix, _passive_display_name(passive_id), level, _passive_stats_text(passive_id, level)],
+	}
+
 func _choose_reward(choice: Dictionary) -> void:
 	match String(choice.get("kind", "")):
 		"weapon":
@@ -456,12 +478,11 @@ func _choose_reward(choice: Dictionary) -> void:
 			RunState.weapons[weapon_id] = clampi(int(choice.get("level", 1)), 1, 3)
 			weapon_manager.refresh_weapons()
 			room_status_text = "%s 提升到 Lv.%d。" % [_weapon_display_name(weapon_id), RunState.get_weapon_level(weapon_id)]
-		"sync":
-			sync_controller.sync_rate = minf(Constants.SYNC_MAX, sync_controller.sync_rate + float(choice.get("value", 30)))
-			room_status_text = "同步率恢复。"
-		"gold":
-			RunState.gold += int(choice.get("value", 20))
-			room_status_text = "获得金币返还。"
+		"passive":
+			var passive_id := String(choice.get("passive_id", "move_speed"))
+			RunState.set_passive_level(passive_id, int(choice.get("level", 1)))
+			sync_controller.sync_rate = minf(sync_controller.sync_rate, RunState.get_sync_max())
+			room_status_text = "%s 提升到 Lv.%d。" % [_passive_display_name(passive_id), RunState.get_passive_level(passive_id)]
 	reward_overlay.hide_overlay()
 	get_tree().paused = false
 	pending_reward_chest = null
@@ -496,6 +517,38 @@ func _weapon_display_name(weapon_id: String) -> String:
 		"beam":
 			return "射线"
 	return weapon_id
+
+func _passive_display_name(passive_id: String) -> String:
+	match passive_id:
+		"move_speed":
+			return "移动速度"
+		"damage_bonus":
+			return "全武器伤害"
+		"cooldown_bonus":
+			return "冷却缩短"
+		"pickup_bonus":
+			return "金币吸附"
+		"sync_bonus":
+			return "同步强化"
+		"gold_bonus":
+			return "金币收益"
+	return passive_id
+
+func _passive_stats_text(passive_id: String, level: int) -> String:
+	match passive_id:
+		"move_speed":
+			return "移动速度 +%d%%" % int(level * 8)
+		"damage_bonus":
+			return "全武器伤害 +%d%%" % int(level * 12)
+		"cooldown_bonus":
+			return "武器冷却 -%d%%" % int(level * 8)
+		"pickup_bonus":
+			return "金币吸附范围 +%d%%" % int(level * 25)
+		"sync_bonus":
+			return "同步上限 +%d，恢复 +%d%%" % [level * 10, level * 20]
+		"gold_bonus":
+			return "金币收益 +%d%%" % int(level * 15)
+	return ""
 
 func get_enemies() -> Array:
 	enemies = enemies.filter(func(enemy: Node) -> bool: return is_instance_valid(enemy))

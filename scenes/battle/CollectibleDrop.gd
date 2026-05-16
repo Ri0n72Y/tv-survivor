@@ -22,7 +22,7 @@ func _process(delta: float) -> void:
 		if distance <= Constants.COLLECTIBLE_PICKUP_RADIUS:
 			collect()
 			return
-		if distance <= Constants.COLLECTIBLE_ATTRACT_RADIUS:
+		if distance <= Constants.COLLECTIBLE_ATTRACT_RADIUS * RunState.get_pickup_radius_multiplier():
 			collecting = true
 		if collecting:
 			var direction := global_position.direction_to(player.global_position)

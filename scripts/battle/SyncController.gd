@@ -9,7 +9,7 @@ var control_state: String = BattleTypes.CONTROLLED
 var signal_text: String = BattleTypes.SIGNAL_STABLE
 
 func setup(initial_sync: float) -> void:
-	sync_rate = clampf(initial_sync, 0.0, Constants.SYNC_MAX)
+	sync_rate = clampf(initial_sync, 0.0, RunState.get_sync_max())
 	time_since_damage = 999.0
 	control_state = BattleTypes.CONTROLLED
 	signal_text = BattleTypes.SIGNAL_STABLE
@@ -30,7 +30,7 @@ func update(delta: float, distance: float) -> void:
 	if distance < stable_radius:
 		signal_text = BattleTypes.SIGNAL_STABLE
 		if time_since_damage >= Constants.SYNC_REGEN_DELAY:
-			sync_rate = minf(Constants.SYNC_MAX, sync_rate + Constants.SYNC_REGEN_PER_SECOND * delta)
+			sync_rate = minf(RunState.get_sync_max(), sync_rate + Constants.SYNC_REGEN_PER_SECOND * RunState.get_sync_regen_multiplier() * delta)
 	elif distance < weak_radius:
 		signal_text = BattleTypes.SIGNAL_DECLINING
 		sync_rate = maxf(0.0, sync_rate - Constants.SYNC_EDGE_DRAIN_PER_SECOND * delta)
@@ -40,3 +40,4 @@ func update(delta: float, distance: float) -> void:
 func recover_from_disconnect() -> void:
 	control_state = BattleTypes.CONTROLLED
 	sync_rate = maxf(sync_rate, Constants.SYNC_MIN_RECOVER_AFTER_DISCONNECT)
+	sync_rate = minf(sync_rate, RunState.get_sync_max())

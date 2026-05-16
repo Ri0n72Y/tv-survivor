@@ -19,7 +19,7 @@ func _process(delta: float) -> void:
 		return
 	cooldown_timer -= delta
 	if cooldown_timer <= 0.0:
-		cooldown_timer = float(Constants.SHAPE_COOLDOWN_LV[level])
+		cooldown_timer = float(Constants.SHAPE_COOLDOWN_LV[level]) * RunState.get_cooldown_multiplier()
 		_trigger()
 
 func _trigger() -> void:
@@ -28,7 +28,7 @@ func _trigger() -> void:
 		directions.append_array([Vector2(1, 1).normalized(), Vector2(1, -1).normalized(), Vector2(-1, 1).normalized(), Vector2(-1, -1).normalized()])
 	var length := 110.0 + float(level - 1) * 30.0
 	var width := 34.0
-	var damage := float(Constants.SHAPE_DAMAGE_LV[level])
+	var damage := float(Constants.SHAPE_DAMAGE_LV[level]) * RunState.get_damage_multiplier()
 	for direction in directions:
 		_spawn_view(direction, length, width)
 		_damage_in_rect(direction.normalized(), length, width, damage)

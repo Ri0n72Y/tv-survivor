@@ -35,7 +35,6 @@ func _ready() -> void:
 	sync_label = Label.new()
 	box.add_child(sync_label)
 	sync_bar = ProgressBar.new()
-	sync_bar.max_value = 100.0
 	box.add_child(sync_bar)
 	signal_label = Label.new()
 	box.add_child(signal_label)
@@ -73,8 +72,9 @@ func update_hud(
 	sync_label.visible = uses_sync
 	sync_bar.visible = uses_sync
 	signal_label.visible = uses_sync
+	sync_bar.max_value = RunState.get_sync_max()
 	sync_bar.value = sync_rate
-	sync_label.text = "同步率：%.0f / 100" % sync_rate
+	sync_label.text = "同步率：%.0f / %.0f" % [sync_rate, RunState.get_sync_max()]
 	signal_label.text = signal_text
 	if signal_text.contains("弱"):
 		signal_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.2))
@@ -84,7 +84,7 @@ func update_hud(
 		signal_label.add_theme_color_override("font_color", Color.WHITE)
 	time_label.text = phase_text
 	guide_label.text = _guide_text(uses_sync, room_type)
-	weapon_label.text = "武器：%d/%d  基础弹 Lv.%d  光环 Lv.%d  固定形状 Lv.%d  射线 Lv.%d\n被动：%d/%d" % [RunState.get_weapon_count(), RunState.weapon_slots, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam"), RunState.get_passive_count(), RunState.passive_slots]
+	weapon_label.text = "武器：%d/%d  基础弹 Lv.%d  光环 Lv.%d  固定形状 Lv.%d  射线 Lv.%d\n被动：%d/%d  移速 Lv.%d  伤害 Lv.%d  冷却 Lv.%d  吸附 Lv.%d  同步 Lv.%d  金币 Lv.%d" % [RunState.get_weapon_count(), RunState.weapon_slots, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam"), RunState.get_passive_count(), RunState.passive_slots, RunState.get_passive_level("move_speed"), RunState.get_passive_level("damage_bonus"), RunState.get_passive_level("cooldown_bonus"), RunState.get_passive_level("pickup_bonus"), RunState.get_passive_level("sync_bonus"), RunState.get_passive_level("gold_bonus")]
 	var has_elite := elite_ratio >= 0.0
 	elite_label.visible = has_elite
 	elite_bar.visible = has_elite

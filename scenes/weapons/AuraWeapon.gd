@@ -20,13 +20,13 @@ func _process(delta: float) -> void:
 	global_position = player.global_position
 	tick_timer -= delta
 	if tick_timer <= 0.0:
-		tick_timer = float(Constants.AURA_TICK_LV[level])
+		tick_timer = float(Constants.AURA_TICK_LV[level]) * RunState.get_cooldown_multiplier()
 		_apply_damage()
 	queue_redraw()
 
 func _apply_damage() -> void:
 	var radius := float(Constants.AURA_RADIUS_LV[level])
-	var damage := float(Constants.AURA_DAMAGE_LV[level])
+	var damage := float(Constants.AURA_DAMAGE_LV[level]) * RunState.get_damage_multiplier()
 	for enemy in enemy_provider.call():
 		if is_instance_valid(enemy) and enemy.global_position.distance_to(global_position) <= radius and enemy.has_method("take_damage"):
 			enemy.take_damage(damage)

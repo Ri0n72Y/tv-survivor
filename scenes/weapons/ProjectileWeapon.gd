@@ -19,7 +19,7 @@ func _process(delta: float) -> void:
 		return
 	cooldown_timer -= delta
 	if cooldown_timer <= 0.0:
-		cooldown_timer = float(Constants.PROJECTILE_COOLDOWN_LV[level])
+		cooldown_timer = float(Constants.PROJECTILE_COOLDOWN_LV[level]) * RunState.get_cooldown_multiplier()
 		_fire()
 
 func _fire() -> void:
@@ -27,7 +27,7 @@ func _fire() -> void:
 
 func _fire_burst() -> void:
 	var count := int(Constants.PROJECTILE_COUNT_LV[level])
-	var damage := float(Constants.PROJECTILE_DAMAGE_LV[level])
+	var damage := float(Constants.PROJECTILE_DAMAGE_LV[level]) * RunState.get_damage_multiplier()
 	for i in range(count):
 		if i > 0:
 			await get_tree().create_timer(0.1).timeout

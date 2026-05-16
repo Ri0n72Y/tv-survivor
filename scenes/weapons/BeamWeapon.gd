@@ -28,7 +28,7 @@ func _process(delta: float) -> void:
 		return
 	tick_timer -= delta
 	if tick_timer <= 0.0:
-		tick_timer = float(Constants.BEAM_TICK_LV[level])
+		tick_timer = float(Constants.BEAM_TICK_LV[level]) * RunState.get_cooldown_multiplier()
 		_damage_enemies_on_beam_path()
 	queue_redraw()
 
@@ -53,7 +53,7 @@ func _target_is_alive() -> bool:
 func _damage_enemies_on_beam_path() -> void:
 	var start_pos := player.global_position
 	var end_pos := locked_target.global_position
-	var beam_damage := float(Constants.BEAM_DAMAGE_LV[level])
+	var beam_damage := float(Constants.BEAM_DAMAGE_LV[level]) * RunState.get_damage_multiplier()
 	for enemy in enemy_provider.call():
 		if not is_instance_valid(enemy):
 			continue

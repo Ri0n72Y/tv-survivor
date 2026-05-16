@@ -188,7 +188,7 @@ func _build_upgrade_overlay() -> void:
 	panel.add_child(box)
 
 	var title := Label.new()
-	title.text = "选择一项武器升级"
+	title.text = "选择一项奖励"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 26)
 	box.add_child(title)
@@ -217,7 +217,7 @@ func _refresh_labels() -> void:
 	var boss_total := _count_cells(GridTypes.CELL_BOSS)
 	var boss_cleared := _count_cleared_cells(GridTypes.CELL_BOSS)
 	progress_label.text = "任务进度：%d/%d  Boss：%d/%d" % [RunState.completed_tasks, RunState.total_tasks, boss_cleared, boss_total]
-	weapon_label.text = "武器：%d/%d  基础弹 Lv.%d  光环 Lv.%d  固定形状 Lv.%d  射线 Lv.%d\n被动：%d/%d" % [RunState.get_weapon_count(), RunState.weapon_slots, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam"), RunState.get_passive_count(), RunState.passive_slots]
+	weapon_label.text = "武器：%d/%d  基础弹 Lv.%d  光环 Lv.%d  固定形状 Lv.%d  射线 Lv.%d\n被动：%d/%d  移速 Lv.%d  伤害 Lv.%d  冷却 Lv.%d  吸附 Lv.%d  同步 Lv.%d  金币 Lv.%d" % [RunState.get_weapon_count(), RunState.weapon_slots, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam"), RunState.get_passive_count(), RunState.passive_slots, RunState.get_passive_level("move_speed"), RunState.get_passive_level("damage_bonus"), RunState.get_passive_level("cooldown_bonus"), RunState.get_passive_level("pickup_bonus"), RunState.get_passive_level("sync_bonus"), RunState.get_passive_level("gold_bonus")]
 	score_label.text = "金币：%d" % RunState.gold
 
 func _refresh_grid() -> void:
@@ -325,35 +325,33 @@ func _open_chest(cell: Dictionary) -> void:
 		message_label.text = "金币不足：打开宝箱需要 %d 金币。" % cost
 		_refresh_all()
 		return
-	if _get_upgradable_weapons().is_empty():
+	if _build_reward_pool().is_empty():
 		cell["opened"] = true
-		message_label.text = "所有武器已经达到 Lv.3。"
+		message_label.text = "没有可用奖励。"
 		_refresh_all()
 		return
 	pending_chest_cell = cell
-	_show_upgrade_overlay(_get_chest_upgrade_choices(cell))
+	_show_upgrade_overlay(_roll_reward_choices())
 
-func _show_upgrade_overlay(choices: Array[String]) -> void:
+func _show_upgrade_overlay(choices: Array[Dictionary]) -> void:
 	for child in upgrade_cards_box.get_children():
 		child.queue_free()
 	if upgrade_subtitle_label != null:
 		upgrade_subtitle_label.text = "宝箱开启消耗 %d 金币。" % int(pending_chest_cell.get("cost", Constants.NORMAL_CHEST_COST))
-	for weapon_id in choices:
-		upgrade_cards_box.add_child(_create_upgrade_card(weapon_id))
+	for choice in choices:
+		upgrade_cards_box.add_child(_create_upgrade_card(choice))
 	upgrade_overlay.visible = true
 
-func _create_upgrade_card(weapon_id: String) -> Button:
+func _create_upgrade_card(choice: Dictionary) -> Button:
 	var card := Button.new()
 	card.custom_minimum_size = Vector2(220, 210)
-	card.text = _upgrade_card_text(weapon_id)
+	card.text = String(choice.get("label", "奖励"))
 	card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	card.disabled = RunState.get_weapon_level(weapon_id) >= 3
-	card.pressed.connect(func() -> void: _choose_weapon_upgrade(weapon_id))
+	var selected_choice := choice.duplicate()
+	card.pressed.connect(func() -> void: _choose_chest_reward(selected_choice))
 	return card
 
-func _choose_weapon_upgrade(weapon_id: String) -> void:
-	if RunState.get_weapon_level(weapon_id) >= 3:
-		return
+func _choose_chest_reward(choice: Dictionary) -> void:
 	var cost := int(pending_chest_cell.get("cost", Constants.NORMAL_CHEST_COST))
 	if RunState.gold < cost:
 		upgrade_overlay.visible = false
@@ -361,12 +359,56 @@ func _choose_weapon_upgrade(weapon_id: String) -> void:
 		_refresh_all()
 		return
 	RunState.gold -= cost
-	RunState.weapons[weapon_id] = mini(3, RunState.get_weapon_level(weapon_id) + 1)
+	match String(choice.get("kind", "")):
+		"weapon":
+			var weapon_id := String(choice.get("weapon_id", "projectile"))
+			RunState.weapons[weapon_id] = clampi(int(choice.get("level", 1)), 1, 3)
+			message_label.text = "打开宝箱：%s 提升到 Lv.%d" % [_weapon_display_name(weapon_id), RunState.get_weapon_level(weapon_id)]
+		"passive":
+			var passive_id := String(choice.get("passive_id", "move_speed"))
+			RunState.set_passive_level(passive_id, int(choice.get("level", 1)))
+			message_label.text = "打开宝箱：%s 提升到 Lv.%d" % [_passive_display_name(passive_id), RunState.get_passive_level(passive_id)]
 	pending_chest_cell["opened"] = true
 	upgrade_overlay.visible = false
-	message_label.text = "打开宝箱：%s 提升到 Lv.%d" % [_weapon_display_name(weapon_id), RunState.get_weapon_level(weapon_id)]
 	pending_chest_cell = {}
 	_refresh_all()
+
+func _roll_reward_choices() -> Array[Dictionary]:
+	var choices := _build_reward_pool()
+	choices.shuffle()
+	return choices.slice(0, mini(3, choices.size()))
+
+func _build_reward_pool() -> Array[Dictionary]:
+	var pool: Array[Dictionary] = []
+	for weapon_id in WEAPON_IDS:
+		var weapon_level := RunState.get_weapon_level(weapon_id)
+		if weapon_level > 0 and weapon_level < 3:
+			pool.append(_weapon_reward(weapon_id, weapon_level + 1, "升级武器"))
+		elif weapon_level <= 0 and RunState.get_weapon_count() < RunState.weapon_slots:
+			pool.append(_weapon_reward(weapon_id, 1, "新武器"))
+	for passive_id in RunState.PASSIVE_IDS:
+		var passive_level := RunState.get_passive_level(passive_id)
+		if passive_level > 0 and passive_level < 3:
+			pool.append(_passive_reward(passive_id, passive_level + 1, "升级被动"))
+		elif passive_level <= 0 and RunState.get_passive_count() < RunState.passive_slots:
+			pool.append(_passive_reward(passive_id, 1, "新被动"))
+	return pool
+
+func _weapon_reward(weapon_id: String, level: int, prefix: String) -> Dictionary:
+	return {
+		"kind": "weapon",
+		"weapon_id": weapon_id,
+		"level": level,
+		"label": "%s\n%s Lv.%d\n%s" % [prefix, _weapon_display_name(weapon_id), level, _weapon_stats_text(weapon_id, level)],
+	}
+
+func _passive_reward(passive_id: String, level: int, prefix: String) -> Dictionary:
+	return {
+		"kind": "passive",
+		"passive_id": passive_id,
+		"level": level,
+		"label": "%s\n%s Lv.%d\n%s" % [prefix, _passive_display_name(passive_id), level, _passive_stats_text(passive_id, level)],
+	}
 
 func _roll_upgrade_choices(count: int) -> Array[String]:
 	var shuffled: Array[String] = []
@@ -446,6 +488,38 @@ func _weapon_display_name(weapon_name: String) -> String:
 		"beam":
 			return "射线"
 	return weapon_name
+
+func _passive_display_name(passive_id: String) -> String:
+	match passive_id:
+		"move_speed":
+			return "移动速度"
+		"damage_bonus":
+			return "全武器伤害"
+		"cooldown_bonus":
+			return "冷却缩短"
+		"pickup_bonus":
+			return "金币吸附"
+		"sync_bonus":
+			return "同步强化"
+		"gold_bonus":
+			return "金币收益"
+	return passive_id
+
+func _passive_stats_text(passive_id: String, level: int) -> String:
+	match passive_id:
+		"move_speed":
+			return "移动速度 +%d%%" % int(level * 8)
+		"damage_bonus":
+			return "全武器伤害 +%d%%" % int(level * 12)
+		"cooldown_bonus":
+			return "武器冷却 -%d%%" % int(level * 8)
+		"pickup_bonus":
+			return "金币吸附范围 +%d%%" % int(level * 25)
+		"sync_bonus":
+			return "同步上限 +%d，恢复 +%d%%" % [level * 10, level * 20]
+		"gold_bonus":
+			return "金币收益 +%d%%" % int(level * 15)
+	return ""
 
 func _is_battle_room(cell_type: String) -> bool:
 	return cell_type == GridTypes.CELL_TASK or cell_type == GridTypes.CELL_SEARCH or cell_type == GridTypes.CELL_ELITE or cell_type == GridTypes.CELL_BOSS
