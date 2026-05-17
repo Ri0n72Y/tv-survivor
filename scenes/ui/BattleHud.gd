@@ -20,22 +20,18 @@ extends CanvasLayer
 ]
 
 var damage_pulse_left := 0.0
-var damage_pulse_duration := 0.32
-var damage_shake_left := 0.0
-var damage_shake_duration := 0.22
+var damage_pulse_duration := 0.45
 var danger_ratio := 0.0
-var visual_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	elite_label.visible = false
 	elite_bar.visible = false
 	elite_bar.max_value = 100.0
-	visual_rng.randomize()
+	damage_feedback.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_update_damage_feedback()
 
 func _process(delta: float) -> void:
 	damage_pulse_left = maxf(0.0, damage_pulse_left - delta)
-	damage_shake_left = maxf(0.0, damage_shake_left - delta)
 	_update_damage_feedback()
 
 func update_hud(
@@ -78,7 +74,6 @@ func update_hud(
 
 func play_damage_feedback(_amount: float = 0.0) -> void:
 	damage_pulse_left = damage_pulse_duration
-	damage_shake_left = damage_shake_duration
 	_update_damage_feedback()
 
 func _update_danger_ratio(sync_rate: float, sync_max: float, uses_sync: bool) -> void:
@@ -92,9 +87,9 @@ func _update_damage_feedback() -> void:
 	var pulse_ratio := 0.0
 	if damage_pulse_duration > 0.0:
 		pulse_ratio = clampf(damage_pulse_left / damage_pulse_duration, 0.0, 1.0)
-	var pulse_alpha := 0.62 * pulse_ratio * pulse_ratio
-	var danger_alpha := 0.42 * danger_ratio
-	var alpha := clampf(maxf(pulse_alpha, danger_alpha), 0.0, 0.78)
+	var pulse_alpha := 0.86 * pulse_ratio * pulse_ratio
+	var danger_alpha := 0.58 * danger_ratio
+	var alpha := clampf(maxf(pulse_alpha, danger_alpha), 0.0, 0.9)
 	for edge in damage_edges:
 		edge.color = Color(0.86, 0.0, 0.0, alpha)
 	if alpha <= 0.01:
@@ -102,15 +97,7 @@ func _update_damage_feedback() -> void:
 		damage_feedback.position = Vector2.ZERO
 		return
 	damage_feedback.visible = true
-	if damage_shake_left > 0.0:
-		var shake_ratio := clampf(damage_shake_left / damage_shake_duration, 0.0, 1.0)
-		var shake_strength := 8.0 * shake_ratio
-		damage_feedback.position = Vector2(
-			visual_rng.randf_range(-shake_strength, shake_strength),
-			visual_rng.randf_range(-shake_strength, shake_strength)
-		)
-	else:
-		damage_feedback.position = Vector2.ZERO
+	damage_feedback.position = Vector2.ZERO
 
 func _guide_text(uses_sync: bool, room_type: String) -> String:
 	match room_type:

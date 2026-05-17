@@ -7,6 +7,9 @@ var controlled := true
 var signal_center := Vector2(640, 360)
 var arena_bounds_enabled := false
 var arena_rect := Rect2(Vector2.ZERO, Vector2(Constants.SCREEN_WIDTH, Constants.SCREEN_HEIGHT))
+var arena_center := Vector2(640, 360)
+var arena_radius := Constants.ARENA_BOUNDARY_RADIUS
+var arena_bounds_shape := "rect"
 var arena_margin := 14.0
 var hit_tween: Tween
 
@@ -35,8 +38,14 @@ func _physics_process(_delta: float) -> void:
 		velocity = global_position.direction_to(signal_center) * Constants.PLAYER_SPEED * RunState.get_move_speed_multiplier()
 	move_and_slide()
 	if arena_bounds_enabled:
-		global_position.x = clampf(global_position.x, arena_rect.position.x + arena_margin, arena_rect.end.x - arena_margin)
-		global_position.y = clampf(global_position.y, arena_rect.position.y + arena_margin, arena_rect.end.y - arena_margin)
+		if arena_bounds_shape == "circle":
+			var offset := global_position - arena_center
+			var max_distance := maxf(0.0, arena_radius - arena_margin)
+			if offset.length() > max_distance:
+				global_position = arena_center + offset.normalized() * max_distance
+		else:
+			global_position.x = clampf(global_position.x, arena_rect.position.x + arena_margin, arena_rect.end.x - arena_margin)
+			global_position.y = clampf(global_position.y, arena_rect.position.y + arena_margin, arena_rect.end.y - arena_margin)
 
 func play_hit_feedback(duration: float) -> void:
 	if hit_tween != null and hit_tween.is_valid():

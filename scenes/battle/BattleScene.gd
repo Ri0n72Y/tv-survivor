@@ -82,9 +82,12 @@ func _process(delta: float) -> void:
 		_finish(false)
 		return
 	battle_elapsed += delta
-	if _uses_sync():
+	if _signal_affects_sync():
 		_update_sync(delta)
 	else:
+		sync_controller.time_since_damage += delta
+		sync_controller.control_state = BattleTypes.CONTROLLED
+		sync_controller.signal_text = BattleTypes.SIGNAL_STABLE
 		player.controlled = true
 	match battle_room_type:
 		GridTypes.CELL_SEARCH:
@@ -108,11 +111,14 @@ func _build_scene() -> void:
 	if bool(room_rules.get(RoomRules.EDGE_IS_WALL, false)):
 		var boundary := ARENA_BOUNDARY_SCENE.instantiate()
 		add_child(boundary)
-		boundary.setup(Rect2(Vector2.ZERO, Vector2(Constants.SCREEN_WIDTH, Constants.SCREEN_HEIGHT)))
+		boundary.setup_circle(signal_center, Constants.ARENA_BOUNDARY_RADIUS)
 	player = PLAYER_SCENE.instantiate()
 	player.global_position = signal_center
 	player.signal_center = signal_center
 	player.arena_bounds_enabled = bool(room_rules.get(RoomRules.EDGE_IS_WALL, false))
+	player.arena_center = signal_center
+	player.arena_radius = Constants.ARENA_BOUNDARY_RADIUS
+	player.arena_bounds_shape = "circle" if player.arena_bounds_enabled else "rect"
 	add_child(player)
 	spawner = EnemySpawner.new()
 	add_child(spawner)
@@ -592,6 +598,9 @@ func get_enemies() -> Array:
 
 func _uses_sync() -> bool:
 	return bool(room_rules.get(RoomRules.USES_SYNC, true))
+
+func _signal_affects_sync() -> bool:
+	return _uses_sync() and bool(room_rules.get(RoomRules.SIGNAL_AFFECTS_SYNC, true))
 
 func _finish(success: bool) -> void:
 	if finished:

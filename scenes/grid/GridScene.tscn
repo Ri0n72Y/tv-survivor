@@ -100,6 +100,7 @@ text = "阵列探索验证"
 layout_mode = 2
 
 [node name="WeaponLabel" type="Label" parent="Root/InfoColumn"]
+custom_minimum_size = Vector2(520, 0)
 layout_mode = 2
 autowrap_mode = 2
 
@@ -107,11 +108,13 @@ autowrap_mode = 2
 layout_mode = 2
 
 [node name="GuideLabel" type="Label" parent="Root/InfoColumn"]
+custom_minimum_size = Vector2(520, 0)
 layout_mode = 2
 text = "操作指南：阵列界面使用 WASD / 方向键移动；只能进入已揭示的相邻非障碍格。宝箱需要金币开启，战斗房会进入幸存者战斗。"
 autowrap_mode = 2
 
 [node name="MessageLabel" type="Label" parent="Root/InfoColumn"]
+custom_minimum_size = Vector2(520, 0)
 layout_mode = 2
 text = "使用 WASD 或方向键移动到已揭示的相邻格。"
 autowrap_mode = 2
