@@ -6,12 +6,17 @@ signal restart_requested
 const Constants = preload("res://scripts/core/Constants.gd")
 const RunRngManagerScript = preload("res://scripts/core/RunRngManager.gd")
 const CELL_SCENE := preload("res://scenes/grid/GridCellView.tscn")
+const MINIMAP_SCENE := preload("res://scenes/ui/MiniMap.tscn")
 const REWARD_OVERLAY_SCENE := preload("res://scenes/ui/RewardOverlay.tscn")
 const WEAPON_IDS: Array[String] = ["projectile", "aura", "shape", "beam"]
 
 var cells: Array = []
 var pending_chest_cell: Dictionary = {}
 var reward_overlay: RewardOverlay
+var minimap: Node
+
+var input_locked := false
+var move_tween: Tween
 
 @onready var title_label: Label = $Root/InfoColumn/TitleLabel
 @onready var progress_label: Label = $Root/InfoColumn/ProgressLabel
@@ -19,7 +24,8 @@ var reward_overlay: RewardOverlay
 @onready var score_label: Label = $Root/InfoColumn/ScoreLabel
 @onready var guide_label: Label = $Root/InfoColumn/GuideLabel
 @onready var message_label: Label = $Root/InfoColumn/MessageLabel
-@onready var grid_container: GridContainer = $Root/PlayColumn/GridPanel/GridCenter/GridContainer
+@onready var grid_container: GridContainer = $Root/PlayColumn/GridPanel/MapViewport/MapContainer/GridContainer
+@onready var map_container: Control = $Root/PlayColumn/GridPanel/MapViewport/MapContainer
 @onready var victory_panel: Panel = $Root/InfoColumn/VictoryPanel
 @onready var current_seed_label: Label = $Root/PlayColumn/RunControls/CurrentSeedLabel
 @onready var seed_input: LineEdit = $Root/PlayColumn/RunControls/SeedInput
@@ -38,6 +44,7 @@ func _ready() -> void:
 		RunState.previous_grid_pos = RunState.player_grid_pos
 		_prepare_chests()
 	_refresh_all()
+	_center_camera_instant()
 
 func handle_battle_result(success: bool, final_sync_rate: float) -> void:
 	var room_pos: Vector2i = RunState.current_task_pos
@@ -63,11 +70,12 @@ func handle_battle_result(success: bool, final_sync_rate: float) -> void:
 	RunState.current_task_pos = Vector2i(-1, -1)
 	RunState.current_room_cell = Vector2i.ZERO
 	RunState.current_battle_room_type = ""
-	GridGenerator.reveal_neighbors(RunState.grid_data, RunState.player_grid_pos)
+	_reveal_connections(RunState.player_grid_pos)
 	_refresh_all()
+	_center_camera_instant()
 
 func _build_ui() -> void:
-	grid_container.columns = RunState.grid_size
+	grid_container.columns = _grid_cols()
 	victory_panel.visible = false
 	reward_overlay = REWARD_OVERLAY_SCENE.instantiate()
 	add_child(reward_overlay)
@@ -79,6 +87,12 @@ func _build_ui() -> void:
 	_refresh_seed_hint()
 	restart_button.pressed.connect(_on_restart_pressed)
 	victory_restart_button.pressed.connect(_on_restart_pressed)
+	_build_minimap()
+
+func _build_minimap() -> void:
+	if RunState.minimap_unlocked:
+		minimap = MINIMAP_SCENE.instantiate()
+		add_child(minimap)
 
 func _on_restart_pressed() -> void:
 	if not _apply_seed_input():
@@ -124,6 +138,7 @@ func _refresh_all() -> void:
 	_refresh_labels()
 	_refresh_grid()
 	_refresh_victory()
+	_refresh_minimap()
 
 func _refresh_labels() -> void:
 	var boss_total := _count_cells(GridTypes.CELL_BOSS)
@@ -136,17 +151,27 @@ func _refresh_grid() -> void:
 	for child in grid_container.get_children():
 		child.queue_free()
 	cells.clear()
-	grid_container.columns = RunState.grid_size
-	for y in range(RunState.grid_size):
-		for x in range(RunState.grid_size):
+	grid_container.columns = _grid_cols()
+	var grid_height: int = RunState.grid_data.size() as int
+	var grid_width: int = _grid_cols()
+	for y in range(grid_height):
+		for x in range(grid_width):
 			var pos := Vector2i(x, y)
 			var cell: Dictionary = RunState.grid_data[y][x]
 			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_CHEST and String(cell.get("state", GridTypes.STATE_HIDDEN)) != GridTypes.STATE_HIDDEN:
 				_ensure_chest_rolls(cell)
-			var view := CELL_SCENE.instantiate()
-			grid_container.add_child(view)
-			view.setup(cell, pos, pos == RunState.player_grid_pos)
-			cells.append(view)
+			# Skip blocked cells rendering for tree maps (optional optimisation)
+			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_BLOCKED and String(cell.get("state", GridTypes.STATE_HIDDEN)) == GridTypes.STATE_HIDDEN:
+				# Render as hidden placeholder
+				var view := CELL_SCENE.instantiate()
+				grid_container.add_child(view)
+				view.setup(cell, pos, pos == RunState.player_grid_pos)
+				cells.append(view)
+			else:
+				var view := CELL_SCENE.instantiate()
+				grid_container.add_child(view)
+				view.setup(cell, pos, pos == RunState.player_grid_pos)
+				cells.append(view)
 
 func _refresh_victory() -> void:
 	var won := _is_run_won()
@@ -156,7 +181,17 @@ func _refresh_victory() -> void:
 		var detail := victory_panel.get_node("VictoryBox/VictoryDetail") as Label
 		detail.text = "任务完成：%d/%d。构筑：基础弹 Lv.%d / 光环 Lv.%d / 固定形状 Lv.%d / 射线 Lv.%d" % [RunState.completed_tasks, RunState.total_tasks, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam")]
 
+func _refresh_minimap() -> void:
+	if minimap != null and minimap.has_method("refresh"):
+		minimap.refresh(RunState.grid_data, RunState.player_grid_pos)
+
+# ──────────────────────────────────────────
+#  Input & movement
+# ──────────────────────────────────────────
+
 func _input(event: InputEvent) -> void:
+	if input_locked:
+		return
 	if reward_overlay != null and reward_overlay.visible:
 		return
 	if seed_input != null and seed_input.has_focus():
@@ -184,36 +219,123 @@ func _try_enter_cell(pos: Vector2i) -> void:
 	if _is_run_won():
 		return
 	if not _can_enter(pos):
-		message_label.text = "只能用键盘进入已揭示、相邻、非障碍格。"
+		message_label.text = "只能进入已揭示、有连接的非障碍格。"
 		return
-	RunState.previous_grid_pos = RunState.player_grid_pos
-	RunState.player_grid_pos = pos
-	GridGenerator.reveal_neighbors(RunState.grid_data, pos)
-	var cell: Dictionary = RunState.grid_data[pos.y][pos.x]
-	var cell_type := String(cell["type"])
-	if cell_type == GridTypes.CELL_CHEST:
-		_open_chest(cell)
-	elif _is_battle_room(cell_type):
-		if not bool(cell.get("cleared", false)):
-			_enter_battle_room(pos, cell_type)
-			return
-		message_label.text = "这个战斗房已经清理。"
-	else:
-		message_label.text = "探索完成，迷雾已展开。"
-	_refresh_all()
+	_animate_move(pos)
 
 func _can_enter(pos: Vector2i) -> bool:
 	if not _is_inside(pos):
 		return false
-	var distance: int = abs(pos.x - RunState.player_grid_pos.x) + abs(pos.y - RunState.player_grid_pos.y)
-	if distance != 1:
-		return false
+
 	var cell: Dictionary = RunState.grid_data[pos.y][pos.x]
-	if String(cell["state"]) == GridTypes.STATE_HIDDEN:
+	var state := String(cell["state"])
+	if state == GridTypes.STATE_HIDDEN:
 		return false
-	if String(cell["type"]) == GridTypes.CELL_BLOCKED:
+
+	var cell_type := String(cell["type"])
+	if cell_type == GridTypes.CELL_BLOCKED:
 		return false
+
+	# Check connection: must be connected to current position in the tree
+	var current_connections: Array = RunState.grid_data[RunState.player_grid_pos.y][RunState.player_grid_pos.x].get("connections", [])
+	if not current_connections.is_empty():
+		# Tree mode: must be explicitly connected
+		if not current_connections.has(pos):
+			return false
+	else:
+		# Legacy: Manhattan distance 1
+		var distance: int = abs(pos.x - RunState.player_grid_pos.x) + abs(pos.y - RunState.player_grid_pos.y)
+		if distance != 1:
+			return false
+
 	return true
+
+func _animate_move(target_pos: Vector2i) -> void:
+	input_locked = true
+	RunState.previous_grid_pos = RunState.player_grid_pos
+
+	# Kill previous tweens
+	if move_tween != null:
+		move_tween.kill()
+	move_tween = create_tween()
+	move_tween.set_parallel()
+
+	# Player: brief scale pulse on current cell
+	var current_player := _find_cell_view(RunState.player_grid_pos)
+	if current_player != null:
+		current_player.modulate = Color(1, 1, 1, 0.55)
+		move_tween.tween_property(current_player, "modulate", Color(1, 1, 1, 1), Constants.GRID_PLAYER_MOVE_DURATION)
+
+	# Update position
+	RunState.player_grid_pos = target_pos
+	_reveal_connections(target_pos)
+
+	# Camera pan
+	_animate_camera_to(target_pos)
+
+	var cell: Dictionary = RunState.grid_data[target_pos.y][target_pos.x]
+	var cell_type := String(cell["type"])
+
+	# Player highlight will be updated on refresh
+	move_tween.chain().tween_callback(func():
+		input_locked = false
+		if cell_type == GridTypes.CELL_CHEST:
+			_open_chest(cell)
+			_refresh_all()
+		elif _is_battle_room(cell_type):
+			if not bool(cell.get("cleared", false)):
+				_enter_battle_room(target_pos, cell_type)
+			else:
+				message_label.text = "这个战斗房已经清理。"
+				_refresh_all()
+		else:
+			message_label.text = "探索完成。"
+			_refresh_all()
+	)
+
+func _reveal_connections(pos: Vector2i) -> void:
+	var grid := RunState.grid_data
+	var cell_conns: Array = grid[pos.y][pos.x].get("connections", [])
+	if not cell_conns.is_empty():
+		GridGenerator.reveal_neighbors_tree(grid, pos)
+	else:
+		GridGenerator.reveal_neighbors(grid, pos)
+
+# ──────────────────────────────────────────
+#  Camera
+# ──────────────────────────────────────────
+
+func _animate_camera_to(grid_pos: Vector2i) -> void:
+	var cell_world_pos := _cell_world_position(grid_pos)
+	var viewport_center := _viewport_center_for_map()
+	var target_offset := viewport_center - cell_world_pos
+	move_tween.tween_property(map_container, "position", target_offset, Constants.GRID_CAMERA_TWEEN_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+func _center_camera_instant() -> void:
+	if map_container == null:
+		return
+	var cell_world_pos := _cell_world_position(RunState.player_grid_pos)
+	var viewport_center := _viewport_center_for_map()
+	map_container.position = viewport_center - cell_world_pos
+
+func _cell_world_position(grid_pos: Vector2i) -> Vector2:
+	return Vector2(
+		grid_pos.x * (Constants.GRID_CELL_SIZE + Constants.GRID_CELL_MARGIN) + (Constants.GRID_CELL_SIZE + Constants.GRID_CELL_MARGIN) * 0.5,
+		grid_pos.y * (Constants.GRID_CELL_SIZE + Constants.GRID_CELL_MARGIN) + (Constants.GRID_CELL_SIZE + Constants.GRID_CELL_MARGIN) * 0.5
+	)
+
+func _viewport_center_for_map() -> Vector2:
+	return Vector2(270, 250)  # centre of the GridPanel area
+
+func _find_cell_view(pos: Vector2i) -> Control:
+	for cell_view in cells:
+		if cell_view.cell_pos == pos:
+			return cell_view
+	return null
+
+# ──────────────────────────────────────────
+#  Battle entry
+# ──────────────────────────────────────────
 
 func _enter_battle_room(pos: Vector2i, cell_type: String) -> void:
 	RunState.current_task_pos = pos
@@ -227,11 +349,15 @@ func _enter_battle_room(pos: Vector2i, cell_type: String) -> void:
 		GridTypes.CELL_SEARCH:
 			message_label.text = "进入搜索房。"
 		_:
-			message_label.text = "进入任务点战斗。"
+			message_label.text = "进入战斗。"
 	call_deferred("_emit_enter_battle_requested")
 
 func _emit_enter_battle_requested() -> void:
 	enter_battle_requested.emit()
+
+# ──────────────────────────────────────────
+#  Chest
+# ──────────────────────────────────────────
 
 func _open_chest(cell: Dictionary) -> void:
 	if bool(cell.get("opened", false)):
@@ -441,11 +567,24 @@ func _passive_stats_text(passive_id: String, level: int) -> String:
 			return "金币收益 +%d%%" % int(level * 15)
 	return ""
 
+# ──────────────────────────────────────────
+#  Helpers
+# ──────────────────────────────────────────
+
 func _is_battle_room(cell_type: String) -> bool:
-	return cell_type == GridTypes.CELL_TASK or cell_type == GridTypes.CELL_SEARCH or cell_type == GridTypes.CELL_ELITE or cell_type == GridTypes.CELL_BOSS
+	return GridTypes.BATTLE_ROOMS.has(cell_type)
 
 func _is_inside(pos: Vector2i) -> bool:
-	return pos.x >= 0 and pos.y >= 0 and pos.x < RunState.grid_size and pos.y < RunState.grid_size
+	var grid_height: int = RunState.grid_data.size() as int
+	if grid_height == 0:
+		return false
+	var grid_width: int = int(RunState.grid_data[0].size())
+	return pos.x >= 0 and pos.y >= 0 and pos.x < grid_width and pos.y < grid_height
+
+func _grid_cols() -> int:
+	if RunState.grid_data.is_empty():
+		return RunState.grid_size
+	return int(RunState.grid_data[0].size())
 
 func _find_start_pos() -> Vector2i:
 	for y in range(RunState.grid_data.size()):

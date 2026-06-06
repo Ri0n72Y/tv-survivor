@@ -35,19 +35,31 @@ custom_minimum_size = Vector2(540, 540)
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="GridCenter" type="CenterContainer" parent="Root/PlayColumn/GridPanel"]
+[node name="MapViewport" type="Control" parent="Root/PlayColumn/GridPanel"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 20.0
-offset_top = 20.0
-offset_right = -20.0
-offset_bottom = -20.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
 grow_horizontal = 2
 grow_vertical = 2
+clip_contents = true
 
-[node name="GridContainer" type="GridContainer" parent="Root/PlayColumn/GridPanel/GridCenter"]
+[node name="MapContainer" type="Control" parent="Root/PlayColumn/GridPanel/MapViewport"]
+layout_mode = 0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+
+[node name="GridContainer" type="GridContainer" parent="Root/PlayColumn/GridPanel/MapViewport/MapContainer"]
 custom_minimum_size = Vector2(480, 480)
 layout_mode = 2
 
@@ -110,7 +122,7 @@ layout_mode = 2
 [node name="GuideLabel" type="Label" parent="Root/InfoColumn"]
 custom_minimum_size = Vector2(520, 0)
 layout_mode = 2
-text = "操作指南：阵列界面使用 WASD / 方向键移动；只能进入已揭示的相邻非障碍格。宝箱需要金币开启，战斗房会进入幸存者战斗。"
+text = "操作指南：阵列界面使用 WASD / 方向键移动；只能进入已揭示、有连接的非障碍格。宝箱需要金币开启，战斗房会进入幸存者战斗。"
 autowrap_mode = 2
 
 [node name="MessageLabel" type="Label" parent="Root/InfoColumn"]

@@ -36,6 +36,8 @@ var passives := {}
 
 var grid_data: Array = []
 
+var minimap_unlocked: bool = true
+
 const PASSIVE_IDS: Array[String] = [
 	"move_speed",
 	"damage_bonus",

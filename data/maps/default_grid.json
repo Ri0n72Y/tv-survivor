@@ -1,5 +1,5 @@
 {
-  "mode": "random",
+  "mode": "tree",
   "size": 6,
   "start": [0, 5],
   "legend": {
@@ -30,5 +30,20 @@
     "boss_count": 1,
     "obstacle_count": 7,
     "max_attempts": 100
+  },
+  "generation": {
+    "mode": "tree",
+    "max_width": 20,
+    "max_height": 20,
+    "min_rooms": 10,
+    "max_rooms": 18,
+    "search_min": 2,
+    "search_max": 5,
+    "elite_min": 1,
+    "elite_max": 2,
+    "boss_count": 1,
+    "chest_count": 1,
+    "ensure_reward_before_elite": true,
+    "max_attempts": 200
   }
 }

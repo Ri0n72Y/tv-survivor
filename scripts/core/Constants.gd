@@ -3,6 +3,7 @@ extends Node
 const SCREEN_WIDTH := 1280
 const SCREEN_HEIGHT := 720
 
+# Legacy static grid
 const GRID_SIZE := 6
 const TASK_COUNT := 3
 const SEARCH_ROOM_COUNT := 1
@@ -10,6 +11,25 @@ const CHEST_COUNT := 5
 const ELITE_ROOM_COUNT := 2
 const BOSS_ROOM_COUNT := 1
 const OBSTACLE_COUNT := 7
+
+# Tree-generation defaults
+const TREE_MAX_WIDTH := 20
+const TREE_MAX_HEIGHT := 20
+const TREE_MIN_ROOMS := 10
+const TREE_MAX_ROOMS := 18
+const TREE_SEARCH_MIN := 2
+const TREE_SEARCH_MAX := 5
+const TREE_ELITE_MIN := 1
+const TREE_ELITE_MAX := 2
+const TREE_BOSS_COUNT := 1
+const TREE_CHEST_COUNT := 1
+const TREE_ENSURE_REWARD_BEFORE_ELITE := true
+
+# Camera
+const GRID_CAMERA_TWEEN_DURATION := 0.2
+const GRID_PLAYER_MOVE_DURATION := 0.15
+const GRID_CELL_SIZE := 76
+const GRID_CELL_MARGIN := 3
 
 const BATTLE_DURATION := 30.0
 const TASK_DURATION := BATTLE_DURATION
