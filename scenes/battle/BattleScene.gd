@@ -5,6 +5,9 @@ signal restart_requested
 
 const Constants = preload("res://scripts/core/Constants.gd")
 const RunRngManagerScript = preload("res://scripts/core/RunRngManager.gd")
+const BuffContainerScript = preload("res://scripts/battle/buffs/BuffContainer.gd")
+const BuffDefinitionScript = preload("res://scripts/battle/buffs/BuffDefinition.gd")
+const BuffSystemScript = preload("res://scripts/battle/buffs/BuffSystem.gd")
 const SIGNAL_AREA_SCENE := preload("res://scenes/battle/SignalArea.tscn")
 const PLAYER_SCENE := preload("res://scenes/battle/PlayerAvatar.tscn")
 const HUD_SCENE := preload("res://scenes/ui/BattleHud.tscn")
@@ -17,11 +20,18 @@ const BATTLE_CHEST_SCENE := preload("res://scenes/battle/BattleChest.tscn")
 const EXTRACTION_POINT_SCENE := preload("res://scenes/battle/ExtractionPoint.tscn")
 const ELITE_ENEMY_SCENE := preload("res://scenes/enemies/EliteEnemy.tscn")
 const WEAPON_IDS: Array[String] = ["projectile", "aura", "shape", "beam"]
+const PLAYER_BUFF_OWNER_ID := "player"
+const BUFF_SIGNAL_LOSS := "signal_loss"
+const BUFF_SYNC_STABLE := "sync_stable"
 
 var signal_center := Vector2(640, 360)
 var player: PlayerAvatar
 var hud: Node
 var sync_controller := SyncController.new()
+var buff_system := BuffSystemScript.new()
+var player_buffs := BuffContainerScript.new()
+var signal_loss_buff: BuffDefinition
+var sync_stable_buff: BuffDefinition
 var spawner: EnemySpawner
 var weapon_manager: WeaponManager
 var enemies: Array = []
@@ -62,6 +72,7 @@ func _ready() -> void:
 	RunState.begin_battle()
 	battle_room_type = RunState.current_battle_room_type if RunState.current_battle_room_type != "" else GridTypes.CELL_TASK
 	room_rules = RoomRules.for_room_type(battle_room_type)
+	_setup_buffs()
 	_build_scene()
 	sync_controller.setup(RunState.next_battle_initial_sync)
 	_update_difficulty()
@@ -85,9 +96,10 @@ func _process(delta: float) -> void:
 	if _signal_affects_sync():
 		_update_sync(delta)
 	else:
-		sync_controller.time_since_damage += delta
 		sync_controller.control_state = BattleTypes.CONTROLLED
 		sync_controller.signal_text = BattleTypes.SIGNAL_STABLE
+		_update_sync_buffs(0.0)
+		_process_buff_events(buff_system.process(delta))
 		player.controlled = true
 	match battle_room_type:
 		GridTypes.CELL_SEARCH:
@@ -102,6 +114,27 @@ func _process(delta: float) -> void:
 	_update_hud()
 	if _uses_sync() and sync_controller.sync_rate <= 0.0:
 		_finish(false)
+
+func _setup_buffs() -> void:
+	buff_system.reset()
+	player_buffs.setup(PLAYER_BUFF_OWNER_ID)
+	buff_system.register_container(player_buffs)
+	signal_loss_buff = BuffDefinitionScript.create(
+		BUFF_SIGNAL_LOSS,
+		"信号弱",
+		5,
+		Constants.BUFF_TICK_SECONDS,
+		-1.0,
+		["debuff", "signal", "sync"]
+	)
+	sync_stable_buff = BuffDefinitionScript.create(
+		BUFF_SYNC_STABLE,
+		"同步稳定",
+		1,
+		Constants.BUFF_TICK_SECONDS,
+		-1.0,
+		["buff", "signal", "sync", "regen"]
+	)
 
 func _build_scene() -> void:
 	if bool(room_rules.get(RoomRules.SHOW_SIGNAL_AREA, true)):
@@ -270,11 +303,70 @@ func _get_player_total_level() -> int:
 
 func _update_sync(delta: float) -> void:
 	var distance := player.global_position.distance_to(signal_center)
+	var was_disconnected := sync_controller.control_state == BattleTypes.DISCONNECTED
 	sync_controller.update(delta, distance)
+	if not was_disconnected and sync_controller.control_state == BattleTypes.DISCONNECTED:
+		_apply_player_damage(Constants.SYNC_BOUNDARY_HIT_DAMAGE, false)
+		_add_signal_loss_stack()
+	_update_sync_buffs(distance)
+	_process_buff_events(buff_system.process(delta))
 	player.controlled = sync_controller.control_state == BattleTypes.CONTROLLED
-	if sync_controller.control_state == BattleTypes.DISCONNECTED and distance <= Constants.SIGNAL_RADIUS * Constants.SIGNAL_WEAK_RATIO:
-		sync_controller.recover_from_disconnect()
-		player.controlled = true
+
+func _is_signal_loss_zone(distance: float) -> bool:
+	return distance >= Constants.SIGNAL_RADIUS * Constants.SIGNAL_WEAK_RATIO
+
+func _update_sync_buffs(distance: float) -> void:
+	_update_signal_loss_buff(distance)
+	_update_sync_stable_buff()
+
+func _update_signal_loss_buff(distance: float) -> void:
+	if _is_signal_loss_zone(distance) or player_buffs.has_buff(BUFF_SIGNAL_LOSS):
+		var instance := player_buffs.ensure_buff(signal_loss_buff)
+		if instance != null:
+			instance.data["in_signal_loss_zone"] = _is_signal_loss_zone(distance)
+
+func _update_sync_stable_buff() -> void:
+	if not _uses_sync() or sync_controller.signal_text != BattleTypes.SIGNAL_STABLE or player_buffs.has_buff(BUFF_SIGNAL_LOSS):
+		player_buffs.remove_buff(BUFF_SYNC_STABLE)
+		return
+	var instance := player_buffs.ensure_buff(sync_stable_buff, 1)
+	if instance != null and not instance.data.has("stable_seconds"):
+		instance.data["stable_seconds"] = 0.0
+
+func _process_buff_events(events: Dictionary) -> void:
+	for event in events.get("before_tick", []):
+		if _is_player_signal_loss_event(event):
+			if bool(event.get("data", {}).get("in_signal_loss_zone", false)):
+				_add_signal_loss_stack()
+			else:
+				player_buffs.set_buff_stacks(BUFF_SIGNAL_LOSS, 0)
+		elif _is_player_sync_stable_event(event):
+			var instance := player_buffs.get_buff(BUFF_SYNC_STABLE)
+			if instance != null:
+				instance.data["stable_seconds"] = float(instance.data.get("stable_seconds", 0.0)) + Constants.BUFF_TICK_SECONDS
+	for event in events.get("tick", []):
+		if _is_player_signal_loss_event(event):
+			var damage := RunState.get_sync_max() * Constants.SIGNAL_LOSS_DAMAGE_PER_STACK_RATIO * float(player_buffs.get_buff_stacks(BUFF_SIGNAL_LOSS))
+			if damage > 0.0:
+				sync_controller.apply_damage(damage)
+				player_buffs.remove_buff(BUFF_SYNC_STABLE)
+		elif _is_player_sync_stable_event(event):
+			var instance := player_buffs.get_buff(BUFF_SYNC_STABLE)
+			if instance != null and float(instance.data.get("stable_seconds", 0.0)) >= Constants.SYNC_REGEN_DELAY:
+				var recovery := Constants.SYNC_REGEN_PER_SECOND * RunState.get_sync_regen_multiplier() * Constants.BUFF_TICK_SECONDS
+				sync_controller.recover_sync(recovery)
+	for event in events.get("after_tick", []):
+		if _is_player_signal_loss_event(event) and player_buffs.get_buff_stacks(BUFF_SIGNAL_LOSS) <= 0:
+			player_buffs.remove_buff(BUFF_SIGNAL_LOSS)
+
+func _is_player_signal_loss_event(event: Dictionary) -> bool:
+	return str(event.get("owner_id", "")) == PLAYER_BUFF_OWNER_ID and str(event.get("buff_id", "")) == BUFF_SIGNAL_LOSS
+
+func _is_player_sync_stable_event(event: Dictionary) -> bool:
+	return str(event.get("owner_id", "")) == PLAYER_BUFF_OWNER_ID and str(event.get("buff_id", "")) == BUFF_SYNC_STABLE
+
+func _add_signal_loss_stack() -> void:
+	player_buffs.apply_buff(signal_loss_buff, 1)
 
 func _update_hud() -> void:
 	var elite_ratio := -1.0
@@ -284,7 +376,7 @@ func _update_hud() -> void:
 			break
 	var phase_text := _get_phase_text()
 	if hud.has_method("update_hud"):
-		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, phase_text, RunState.weapons, elite_ratio, RunState.gold, _uses_sync(), battle_room_type, _get_objective_text(), room_status_text)
+		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, phase_text, RunState.weapons, elite_ratio, RunState.gold, _uses_sync(), battle_room_type, _get_objective_text(), room_status_text, player_buffs.get_display_buffs())
 
 func _get_phase_text() -> String:
 	if battle_room_type == GridTypes.CELL_BOSS:
@@ -434,13 +526,18 @@ func _start_extraction() -> void:
 	spawner.stop()
 
 func _on_player_damaged(amount: float) -> void:
+	_apply_player_damage(amount, true)
+
+func _apply_player_damage(amount: float, respect_invulnerability: bool) -> void:
 	if player_hit_invulnerability_left > 0.0:
-		return
+		if respect_invulnerability:
+			return
 	player_hit_invulnerability_left = player_hit_invulnerability_seconds
 	if player != null and player.has_method("play_hit_feedback"):
 		player.play_hit_feedback(player_hit_invulnerability_seconds)
 	if _uses_sync():
 		sync_controller.apply_damage(amount)
+		player_buffs.remove_buff(BUFF_SYNC_STABLE)
 	if hud != null and hud.has_method("play_damage_feedback"):
 		hud.play_damage_feedback(amount)
 

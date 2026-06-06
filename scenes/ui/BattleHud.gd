@@ -22,6 +22,9 @@ extends CanvasLayer
 var damage_pulse_left := 0.0
 var damage_pulse_duration := 0.45
 var danger_ratio := 0.0
+var danger_target := 0.0
+var danger_rise_speed := 0.8
+var danger_fall_speed := 1.6
 
 func _ready() -> void:
 	elite_label.visible = false
@@ -32,6 +35,8 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	damage_pulse_left = maxf(0.0, damage_pulse_left - delta)
+	var danger_speed := danger_rise_speed if danger_target > danger_ratio else danger_fall_speed
+	danger_ratio = move_toward(danger_ratio, danger_target, danger_speed * delta)
 	_update_damage_feedback()
 
 func update_hud(
@@ -44,7 +49,8 @@ func update_hud(
 	uses_sync: bool = true,
 	room_type: String = GridTypes.CELL_TASK,
 	objective_text: String = "",
-	status_text: String = ""
+	status_text: String = "",
+	active_buffs: Array[Dictionary] = []
 ) -> void:
 	score_label.text = "金币：%d" % gold
 	objective_label.text = objective_text
@@ -55,9 +61,12 @@ func update_hud(
 	sync_bar.max_value = RunState.get_sync_max()
 	sync_bar.value = sync_rate
 	sync_label.text = "同步率：%.0f / %.0f" % [sync_rate, RunState.get_sync_max()]
-	_update_danger_ratio(sync_rate, RunState.get_sync_max(), uses_sync)
+	_update_danger_target(signal_text, uses_sync)
 	signal_label.text = signal_text
-	if signal_text.contains("弱"):
+	var buff_summary := _buff_summary(active_buffs)
+	if buff_summary != "":
+		signal_label.text = "%s  %s" % [signal_text, buff_summary]
+	if signal_text.contains("下降") or signal_text.contains("弱"):
 		signal_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.2))
 	elif signal_text.contains("断开"):
 		signal_label.add_theme_color_override("font_color", Color(1.0, 0.25, 0.2))
@@ -76,12 +85,18 @@ func play_damage_feedback(_amount: float = 0.0) -> void:
 	damage_pulse_left = damage_pulse_duration
 	_update_damage_feedback()
 
-func _update_danger_ratio(sync_rate: float, sync_max: float, uses_sync: bool) -> void:
-	if not uses_sync or sync_max <= 0.0:
-		danger_ratio = 0.0
+func _update_danger_target(signal_text: String, uses_sync: bool) -> void:
+	if not uses_sync:
+		danger_target = 0.0
 		return
-	var hp_ratio := clampf(sync_rate / sync_max, 0.0, 1.0)
-	danger_ratio = clampf((0.55 - hp_ratio) / 0.45, 0.0, 1.0)
+	if signal_text == BattleTypes.SIGNAL_DECLINING:
+		danger_target = 0.48
+	elif signal_text == BattleTypes.SIGNAL_WEAK:
+		danger_target = 0.68
+	elif signal_text == BattleTypes.SIGNAL_DISCONNECTED:
+		danger_target = 0.82
+	else:
+		danger_target = 0.0
 
 func _update_damage_feedback() -> void:
 	var pulse_ratio := 0.0
@@ -111,3 +126,20 @@ func _guide_text(uses_sync: bool, room_type: String) -> String:
 			if uses_sync:
 				return "指南：WASD / 方向键移动；保持同步率，拾取绿色掉落金币；撤离中需要等待倒计时。"
 	return "指南：WASD / 方向键移动。"
+
+func _buff_summary(active_buffs: Array[Dictionary]) -> String:
+	var parts: Array[String] = []
+	for buff in active_buffs:
+		if str(buff.get("id", "")) == "sync_stable":
+			continue
+		var buff_name := str(buff.get("name", ""))
+		if buff_name == "":
+			continue
+		var stacks := int(buff.get("stacks", 0))
+		if stacks <= 0:
+			continue
+		if stacks > 1:
+			parts.append("%s x%d" % [buff_name, stacks])
+		else:
+			parts.append(buff_name)
+	return "  ".join(parts)
