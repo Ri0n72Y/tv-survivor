@@ -15,10 +15,21 @@ var is_player_here := false
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-func setup(data: Dictionary, pos: Vector2i, player_here: bool) -> void:
+func setup(data: Dictionary, pos: Vector2i, player_here: bool, is_void := false) -> void:
 	cell_data = data
 	cell_pos = pos
 	is_player_here = player_here
+
+	if is_void:
+		# Void cell: completely invisible, transparent, no border, no text, no highlight
+		background.color = Color(0, 0, 0, 0)
+		background.modulate = Color(0, 0, 0, 0)
+		player_highlight.visible = false
+		player_frame.visible = false
+		player_badge.visible = false
+		mark_label.text = ""
+		return
+
 	_update_background()
 	_update_label()
 
@@ -27,10 +38,7 @@ func _update_background() -> void:
 	var cell_type := String(cell_data.get("type", GridTypes.CELL_EMPTY))
 	var color := Color(0.12, 0.12, 0.14)
 
-	if state == GridTypes.STATE_CLEARED:
-		# Cleared rooms dimmed
-		color = Color(0.14, 0.16, 0.20)
-	elif state == GridTypes.STATE_REVEALED:
+	if state == GridTypes.STATE_REVEALED:
 		color = Color(0.35, 0.36, 0.38)
 	elif state == GridTypes.STATE_VISITED:
 		color = Color(0.12, 0.20, 0.26)
@@ -44,27 +52,28 @@ func _update_background() -> void:
 			GridTypes.CELL_TASK:
 				if bool(cell_data.get("cleared", false)):
 					color = Color(0.24, 0.12, 0.36)
-				elif state != GridTypes.STATE_CLEARED:
+				else:
 					color = Color(0.48, 0.24, 0.75)
 			GridTypes.CELL_SEARCH:
 				if bool(cell_data.get("cleared", false)):
 					color = Color(0.06, 0.22, 0.34)
-				elif state != GridTypes.STATE_CLEARED:
+				else:
 					color = Color(0.12, 0.50, 0.78)
 			GridTypes.CELL_ELITE:
 				if bool(cell_data.get("cleared", false)):
 					color = Color(0.30, 0.08, 0.08)
-				elif state != GridTypes.STATE_CLEARED:
+				else:
 					color = Color(0.72, 0.18, 0.18)
 			GridTypes.CELL_BOSS:
 				if bool(cell_data.get("cleared", false)):
 					color = Color(0.38, 0.10, 0.02)
-				elif state != GridTypes.STATE_CLEARED:
+				else:
 					color = Color(0.95, 0.30, 0.08)
 			GridTypes.CELL_BLOCKED:
 				color = Color(0.03, 0.03, 0.04)
 
 	background.color = color
+	background.modulate = Color.WHITE
 	player_highlight.visible = is_player_here
 	player_frame.visible = is_player_here
 	player_badge.visible = is_player_here

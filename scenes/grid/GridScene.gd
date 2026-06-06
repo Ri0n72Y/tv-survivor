@@ -24,8 +24,9 @@ var move_tween: Tween
 @onready var score_label: Label = $Root/InfoColumn/ScoreLabel
 @onready var guide_label: Label = $Root/InfoColumn/GuideLabel
 @onready var message_label: Label = $Root/InfoColumn/MessageLabel
-@onready var grid_container: GridContainer = $Root/PlayColumn/GridPanel/MapViewport/MapContainer/GridContainer
+@onready var map_viewport: Control = $Root/PlayColumn/GridPanel/MapViewport
 @onready var map_container: Control = $Root/PlayColumn/GridPanel/MapViewport/MapContainer
+@onready var grid_container: GridContainer = $Root/PlayColumn/GridPanel/MapViewport/MapContainer/GridContainer
 @onready var victory_panel: Panel = $Root/InfoColumn/VictoryPanel
 @onready var current_seed_label: Label = $Root/PlayColumn/RunControls/CurrentSeedLabel
 @onready var seed_input: LineEdit = $Root/PlayColumn/RunControls/SeedInput
@@ -57,7 +58,7 @@ func handle_battle_result(success: bool, final_sync_rate: float) -> void:
 				RunState.completed_tasks += 1
 		if RoomRules.uses_sync(room_type):
 			if final_sync_rate >= 80.0:
-				GridGenerator.reveal_ring(RunState.grid_data, room_pos)
+				_reveal_tree_safe(RunState.grid_data, room_pos, 1)
 			RunState.next_battle_initial_sync = 70.0 if final_sync_rate < 30.0 else 100.0
 			message_label.text = "战斗成功，同步率 %.0f" % final_sync_rate
 		else:
@@ -73,6 +74,13 @@ func handle_battle_result(success: bool, final_sync_rate: float) -> void:
 	_reveal_connections(RunState.player_grid_pos)
 	_refresh_all()
 	_center_camera_instant()
+
+func _reveal_tree_safe(grid: Array, pos: Vector2i, radius: int) -> void:
+	var conns: Array = grid[pos.y][pos.x].get("connections", [])
+	if not conns.is_empty():
+		GridGenerator.reveal_connected_radius(grid, pos, radius)
+	else:
+		GridGenerator.reveal_ring(grid, pos)
 
 func _build_ui() -> void:
 	grid_container.columns = _grid_cols()
@@ -143,9 +151,49 @@ func _refresh_all() -> void:
 func _refresh_labels() -> void:
 	var boss_total := _count_cells(GridTypes.CELL_BOSS)
 	var boss_cleared := _count_cleared_cells(GridTypes.CELL_BOSS)
-	progress_label.text = "任务进度：%d/%d  Boss：%d/%d" % [RunState.completed_tasks, RunState.total_tasks, boss_cleared, boss_total]
+	var total: int = _count_tree_nodes() if _is_tree_mode() else GridGenerator._grid_height(RunState.grid_data) * GridGenerator._grid_width(RunState.grid_data)
+	var explored := _count_revealed_tree_nodes()
+	var cleared := _count_tree_cleared()
+	progress_label.text = "Boss：%d/%d  已清理：%d  已探索：%d/%d" % [boss_cleared, boss_total, cleared, explored, total]
 	weapon_label.text = "武器：%d/%d  基础弹 Lv.%d  光环 Lv.%d  固定形状 Lv.%d  射线 Lv.%d\n被动：%d/%d  移速 Lv.%d  伤害 Lv.%d  冷却 Lv.%d  吸附 Lv.%d  同步 Lv.%d  金币 Lv.%d" % [RunState.get_weapon_count(), RunState.weapon_slots, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam"), RunState.get_passive_count(), RunState.passive_slots, RunState.get_passive_level("move_speed"), RunState.get_passive_level("damage_bonus"), RunState.get_passive_level("cooldown_bonus"), RunState.get_passive_level("pickup_bonus"), RunState.get_passive_level("sync_bonus"), RunState.get_passive_level("gold_bonus")]
 	score_label.text = "金币：%d" % RunState.gold
+
+func _is_tree_mode() -> bool:
+	for row in RunState.grid_data:
+		for cell in row:
+			var conns: Array = cell.get("connections", [])
+			if not conns.is_empty():
+				return true
+	return false
+
+func _count_tree_nodes() -> int:
+	var count: int = 0
+	for row in RunState.grid_data:
+		for cell in row:
+			var t := String(cell.get("type", GridTypes.CELL_EMPTY))
+			if t != GridTypes.CELL_BLOCKED:
+				count += 1
+	return count
+
+func _count_revealed_tree_nodes() -> int:
+	var count: int = 0
+	for row in RunState.grid_data:
+		for cell in row:
+			var t := String(cell.get("type", GridTypes.CELL_EMPTY))
+			if t == GridTypes.CELL_BLOCKED:
+				continue
+			var s := String(cell.get("state", GridTypes.STATE_HIDDEN))
+			if s != GridTypes.STATE_HIDDEN:
+				count += 1
+	return count
+
+func _count_tree_cleared() -> int:
+	var count: int = 0
+	for row in RunState.grid_data:
+		for cell in row:
+			if bool(cell.get("cleared", false)):
+				count += 1
+	return count
 
 func _refresh_grid() -> void:
 	for child in grid_container.get_children():
@@ -160,18 +208,16 @@ func _refresh_grid() -> void:
 			var cell: Dictionary = RunState.grid_data[y][x]
 			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_CHEST and String(cell.get("state", GridTypes.STATE_HIDDEN)) != GridTypes.STATE_HIDDEN:
 				_ensure_chest_rolls(cell)
-			# Skip blocked cells rendering for tree maps (optional optimisation)
+
+			var view := CELL_SCENE.instantiate()
+			grid_container.add_child(view)
+
+			var is_void := false
 			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_BLOCKED and String(cell.get("state", GridTypes.STATE_HIDDEN)) == GridTypes.STATE_HIDDEN:
-				# Render as hidden placeholder
-				var view := CELL_SCENE.instantiate()
-				grid_container.add_child(view)
-				view.setup(cell, pos, pos == RunState.player_grid_pos)
-				cells.append(view)
-			else:
-				var view := CELL_SCENE.instantiate()
-				grid_container.add_child(view)
-				view.setup(cell, pos, pos == RunState.player_grid_pos)
-				cells.append(view)
+				is_void = true
+
+			view.setup(cell, pos, pos == RunState.player_grid_pos and not is_void, is_void)
+			cells.append(view)
 
 func _refresh_victory() -> void:
 	var won := _is_run_won()
@@ -179,7 +225,7 @@ func _refresh_victory() -> void:
 	if won:
 		message_label.text = "Boss 已清理，本局结束。"
 		var detail := victory_panel.get_node("VictoryBox/VictoryDetail") as Label
-		detail.text = "任务完成：%d/%d。构筑：基础弹 Lv.%d / 光环 Lv.%d / 固定形状 Lv.%d / 射线 Lv.%d" % [RunState.completed_tasks, RunState.total_tasks, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam")]
+		detail.text = "构筑：基础弹 Lv.%d / 光环 Lv.%d / 固定形状 Lv.%d / 射线 Lv.%d" % [RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam")]
 
 func _refresh_minimap() -> void:
 	if minimap != null and minimap.has_method("refresh"):
@@ -236,14 +282,11 @@ func _can_enter(pos: Vector2i) -> bool:
 	if cell_type == GridTypes.CELL_BLOCKED:
 		return false
 
-	# Check connection: must be connected to current position in the tree
 	var current_connections: Array = RunState.grid_data[RunState.player_grid_pos.y][RunState.player_grid_pos.x].get("connections", [])
 	if not current_connections.is_empty():
-		# Tree mode: must be explicitly connected
 		if not current_connections.has(pos):
 			return false
 	else:
-		# Legacy: Manhattan distance 1
 		var distance: int = abs(pos.x - RunState.player_grid_pos.x) + abs(pos.y - RunState.player_grid_pos.y)
 		if distance != 1:
 			return false
@@ -254,30 +297,24 @@ func _animate_move(target_pos: Vector2i) -> void:
 	input_locked = true
 	RunState.previous_grid_pos = RunState.player_grid_pos
 
-	# Kill previous tweens
 	if move_tween != null:
 		move_tween.kill()
 	move_tween = create_tween()
 	move_tween.set_parallel()
 
-	# Player: brief scale pulse on current cell
-	var current_player := _find_cell_view(RunState.player_grid_pos)
-	if current_player != null:
-		current_player.modulate = Color(1, 1, 1, 0.55)
-		move_tween.tween_property(current_player, "modulate", Color(1, 1, 1, 1), Constants.GRID_PLAYER_MOVE_DURATION)
-
-	# Update position
+	# Scheme A: map moves so target cell slides to centre; player highlight updates after.
 	RunState.player_grid_pos = target_pos
 	_reveal_connections(target_pos)
 
-	# Camera pan
+	# Camera pan (map slides to centre the target)
 	_animate_camera_to(target_pos)
 
 	var cell: Dictionary = RunState.grid_data[target_pos.y][target_pos.x]
 	var cell_type := String(cell["type"])
 
-	# Player highlight will be updated on refresh
+	# Refresh grid at end so highlight updates on the new cell
 	move_tween.chain().tween_callback(func():
+		_refresh_grid()
 		input_locked = false
 		if cell_type == GridTypes.CELL_CHEST:
 			_open_chest(cell)
@@ -302,7 +339,7 @@ func _reveal_connections(pos: Vector2i) -> void:
 		GridGenerator.reveal_neighbors(grid, pos)
 
 # ──────────────────────────────────────────
-#  Camera
+#  Camera (dynamic centre from MapViewport)
 # ──────────────────────────────────────────
 
 func _animate_camera_to(grid_pos: Vector2i) -> void:
@@ -325,7 +362,9 @@ func _cell_world_position(grid_pos: Vector2i) -> Vector2:
 	)
 
 func _viewport_center_for_map() -> Vector2:
-	return Vector2(270, 250)  # centre of the GridPanel area
+	if map_viewport != null:
+		return map_viewport.size * 0.5
+	return Vector2(260, 250)
 
 func _find_cell_view(pos: Vector2i) -> Control:
 	for cell_view in cells:

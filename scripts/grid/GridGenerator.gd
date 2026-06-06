@@ -28,6 +28,21 @@ static func generate(seed_value: int, config_path: String = DEFAULT_MAP_PATH, rn
 	return generate_random(seed_value, _random_config(config), rng_manager)
 
 # ──────────────────────────────────────────
+#  Rect-grid helpers (width-aware)
+# ──────────────────────────────────────────
+
+static func _grid_width(grid: Array) -> int:
+	if grid.is_empty(): return 0
+	return int(grid[0].size())
+
+static func _grid_height(grid: Array) -> int:
+	return grid.size() as int
+
+static func _is_inside_grid(grid: Array, pos: Vector2i) -> bool:
+	if grid.is_empty(): return false
+	return pos.x >= 0 and pos.y >= 0 and pos.x < _grid_width(grid) and pos.y < _grid_height(grid)
+
+# ──────────────────────────────────────────
 #  Tree-generation (mode = "tree")
 # ──────────────────────────────────────────
 
@@ -37,14 +52,16 @@ static func generate_tree(seed_value: int, config: Dictionary, rng_manager: RunR
 	var max_height: int = int(gen_cfg["max_height"])
 	var min_rooms: int = int(gen_cfg["min_rooms"])
 	var max_rooms: int = int(gen_cfg["max_rooms"])
+	var max_attempts: int = int(gen_cfg["max_attempts"])
 
 	var start_pos := _read_vector2i(config.get("start", [0, max_height - 1]), Vector2i(0, max_height - 1))
 	var map_stream := _stream_for(seed_value, rng_manager, RunRngManagerScript.STREAM_MAP_ROUTE)
 	var node_stream := _stream_for(seed_value, rng_manager, RunRngManagerScript.STREAM_GRID_NODE)
 
-	var max_attempts := int(config.get("max_attempts", 200))
 	for _attempt in range(max_attempts):
-		var tree := _grow_tree(Vector2i(start_pos.x, start_pos.y), max_width, max_height, min_rooms, max_rooms, node_stream)
+		# Random target room count between min and max
+		var target_rooms: int = node_stream.randi_range(min_rooms, max_rooms)
+		var tree := _grow_tree(Vector2i(start_pos.x, start_pos.y), max_width, max_height, target_rooms, node_stream)
 		if tree.is_empty():
 			continue
 
@@ -85,24 +102,25 @@ static func _tree_generation_config(config: Dictionary) -> Dictionary:
 	gen_cfg["boss_count"] = int(gen_cfg.get("boss_count", Constants.TREE_BOSS_COUNT))
 	gen_cfg["chest_count"] = int(gen_cfg.get("chest_count", Constants.TREE_CHEST_COUNT))
 	gen_cfg["ensure_reward_before_elite"] = bool(gen_cfg.get("ensure_reward_before_elite", Constants.TREE_ENSURE_REWARD_BEFORE_ELITE))
+	gen_cfg["max_attempts"] = int(gen_cfg.get("max_attempts", 200))
 	return gen_cfg
 
 # ───── tree growth ─────
 
-static func _grow_tree(root: Vector2i, max_width: int, max_height: int, min_rooms: int, max_rooms: int, rng: RunRngStream) -> Dictionary:
+static func _grow_tree(root: Vector2i, max_width: int, max_height: int, target_rooms: int, rng: RunRngStream) -> Dictionary:
 	var nodes: Dictionary = {}
 	var frontier: Array[Vector2i] = []
 	nodes[_pos_key(root.x, root.y)] = _make_node(root.x, root.y)
 	frontier.append(root)
 
 	var directions := [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
-	while not frontier.is_empty() and nodes.size() < max_rooms:
+	while not frontier.is_empty() and nodes.size() < target_rooms:
 		_shuffle_positions(frontier, rng)
 		var parent: Vector2i = frontier.pop_front()
 		_shuffle_array_static(directions, rng)
 
 		for dir in directions:
-			if nodes.size() >= max_rooms:
+			if nodes.size() >= target_rooms:
 				break
 			var nx: int = parent.x + dir.x
 			var ny: int = parent.y + dir.y
@@ -116,7 +134,7 @@ static func _grow_tree(root: Vector2i, max_width: int, max_height: int, min_room
 			_connect_bidirectional(nodes, parent.x, parent.y, nx, ny)
 			frontier.append(Vector2i(nx, ny))
 
-	if nodes.size() < min_rooms:
+	if nodes.size() < target_rooms:
 		return {}
 	return nodes
 
@@ -156,8 +174,8 @@ static func _tree_to_grid(tree: Dictionary, max_width: int, max_height: int) -> 
 	var grid := _new_empty_grid_rect(max_width, max_height)
 	for key in tree.keys():
 		var node: Dictionary = tree[key]
-		var x := int(node["x"])
-		var y := int(node["y"])
+		var x: int = int(node["x"])
+		var y: int = int(node["y"])
 		grid[y][x]["x"] = x
 		grid[y][x]["y"] = y
 		grid[y][x]["type"] = String(node["type"])
@@ -176,7 +194,7 @@ static func _tree_to_grid(tree: Dictionary, max_width: int, max_height: int) -> 
 # ───── room-type assignment ─────
 
 static func _assign_room_types(grid: Array, tree: Dictionary, start_pos: Vector2i, gen_cfg: Dictionary, rng: RunRngStream) -> bool:
-	var max_attempts := int(gen_cfg.get("max_attempts", 200))
+	var max_attempts: int = int(gen_cfg.get("max_attempts", 200))
 	for _attempt in range(max_attempts):
 		_reset_tree_types(grid, tree)
 
@@ -260,7 +278,6 @@ static func _pick_boss_leaf(tree: Dictionary, start_pos: Vector2i) -> Vector2i:
 		if node["connections"].size() <= 1:
 			leaves.append(pos)
 	if leaves.is_empty():
-		# Fallback: pick any node except start
 		for key in tree.keys():
 			var node: Dictionary = tree[key]
 			var pos := Vector2i(node["x"], node["y"])
@@ -268,7 +285,6 @@ static func _pick_boss_leaf(tree: Dictionary, start_pos: Vector2i) -> Vector2i:
 				return pos
 		return start_pos
 
-	# Sort by distance descending, pick from farthest
 	leaves.sort_custom(func(a, b):
 		return int(distances.get(a, 0) as int) > int(distances.get(b, 0) as int)
 	)
@@ -294,8 +310,10 @@ static func _compute_distances_from(tree: Dictionary, start: Vector2i) -> Dictio
 
 static func _check_elite_reward_constraint(grid: Array, start_pos: Vector2i) -> bool:
 	var elite_positions: Array[Vector2i] = []
-	for y in range(grid.size()):
-		for x in range(grid[y].size()):
+	var grid_height: int = _grid_height(grid)
+	var grid_width: int = _grid_width(grid)
+	for y in range(grid_height):
+		for x in range(grid_width):
 			if String(grid[y][x]["type"]) == GridTypeDefs.CELL_ELITE:
 				elite_positions.append(Vector2i(x, y))
 
@@ -318,7 +336,6 @@ static func _has_reward_before_elite(grid: Array, path: Array[Vector2i], elite_p
 	return false
 
 static func _find_unique_path(grid: Array, start_pos: Vector2i, target_pos: Vector2i) -> Array[Vector2i]:
-	# BFS to find unique path in a tree (always unique if acyclic)
 	var parent: Dictionary = {}
 	var queue: Array[Vector2i] = []
 	var visited: Array[Vector2i] = []
@@ -329,7 +346,6 @@ static func _find_unique_path(grid: Array, start_pos: Vector2i, target_pos: Vect
 	while not queue.is_empty():
 		var current: Vector2i = queue.pop_front() as Vector2i
 		if current == target_pos:
-			# Reconstruct path
 			var path: Array[Vector2i] = []
 			var step := target_pos
 			while step != Vector2i(-1, -1):
@@ -354,7 +370,6 @@ static func _find_unique_path(grid: Array, start_pos: Vector2i, target_pos: Vect
 # ───── tree verification ─────
 
 static func _verify_tree_constraints(grid: Array, start_pos: Vector2i, gen_cfg: Dictionary) -> bool:
-	# Count rooms
 	var type_counts := _count_tree_room_types(grid)
 	var wanted_boss: int = int(gen_cfg["boss_count"])
 	var wanted_search_min: int = int(gen_cfg["search_min"])
@@ -363,7 +378,7 @@ static func _verify_tree_constraints(grid: Array, start_pos: Vector2i, gen_cfg: 
 	var wanted_elite_max: int = int(gen_cfg["elite_max"])
 	var wanted_chest: int = int(gen_cfg["chest_count"])
 
-	if type_counts.get(GridTypeDefs.CELL_BOSS, 0) != wanted_boss:
+	if int(type_counts.get(GridTypeDefs.CELL_BOSS, 0)) != wanted_boss:
 		return false
 	var search_n: int = int(type_counts.get(GridTypeDefs.CELL_SEARCH, 0))
 	if search_n < wanted_search_min or search_n > wanted_search_max:
@@ -371,12 +386,11 @@ static func _verify_tree_constraints(grid: Array, start_pos: Vector2i, gen_cfg: 
 	var elite_n: int = int(type_counts.get(GridTypeDefs.CELL_ELITE, 0))
 	if elite_n < wanted_elite_min or elite_n > wanted_elite_max:
 		return false
-	if type_counts.get(GridTypeDefs.CELL_CHEST, 0) != wanted_chest:
+	if int(type_counts.get(GridTypeDefs.CELL_CHEST, 0)) != wanted_chest:
 		return false
-	if type_counts.get(GridTypeDefs.CELL_TASK, 0) > 0:
+	if int(type_counts.get(GridTypeDefs.CELL_TASK, 0)) > 0:
 		return false
 
-	# All target rooms reachable from start
 	var targets := _tree_target_positions(grid)
 	if not _all_targets_reachable(grid, start_pos, targets):
 		return false
@@ -385,16 +399,16 @@ static func _verify_tree_constraints(grid: Array, start_pos: Vector2i, gen_cfg: 
 
 static func _count_tree_room_types(grid: Array) -> Dictionary:
 	var counts: Dictionary = {}
-	for y in range(grid.size()):
-		for x in range(grid[y].size()):
+	for y in range(_grid_height(grid)):
+		for x in range(_grid_width(grid)):
 			var cell_type := String(grid[y][x]["type"])
 			counts[cell_type] = int(int(counts.get(cell_type, 0))) + 1
 	return counts
 
 static func _tree_target_positions(grid: Array) -> Array[Vector2i]:
 	var targets: Array[Vector2i] = []
-	for y in range(grid.size()):
-		for x in range(grid[y].size()):
+	for y in range(_grid_height(grid)):
+		for x in range(_grid_width(grid)):
 			var cell_type := String(grid[y][x].get("type", GridTypeDefs.CELL_EMPTY))
 			if cell_type != GridTypeDefs.CELL_EMPTY and cell_type != GridTypeDefs.CELL_BLOCKED and cell_type != GridTypeDefs.CELL_START:
 				targets.append(Vector2i(x, y))
@@ -408,13 +422,11 @@ static func _tree_fallback(seed_value: int, gen_cfg: Dictionary, start_pos: Vect
 	var grid := _new_empty_grid_rect(max_width, max_height)
 	_set_cell_type(grid, start_pos, GridTypeDefs.CELL_START)
 
-	# Build a simple line/path from start to boss
 	var boss_x := clampi(start_pos.x + 2, 0, max_width - 1)
 	var boss_y := start_pos.y
 	_set_cell_type(grid, Vector2i(boss_x, boss_y), GridTypeDefs.CELL_BOSS)
 	_add_connection(grid, start_pos, Vector2i(boss_x, boss_y))
 
-	# Add a search and chest along way
 	var mid_pos := Vector2i(clampi(start_pos.x + 1, 0, max_width - 1), start_pos.y)
 	grid[mid_pos.y][mid_pos.x]["type"] = GridTypeDefs.CELL_SEARCH
 	_add_connection(grid, start_pos, mid_pos)
@@ -438,7 +450,7 @@ static func _add_connection(grid: Array, a: Vector2i, b: Vector2i) -> void:
 		cb.append(a)
 		grid[b.y][b.x]["connections"] = cb
 
-# ───── tree fog ─────
+# ───── tree fog / reveal ─────
 
 static func _apply_initial_fog_tree(grid: Array, start_pos: Vector2i) -> void:
 	_reveal_at(grid, start_pos, true)
@@ -455,6 +467,42 @@ static func reveal_neighbors_tree(grid: Array, pos: Vector2i) -> void:
 		var state := String(grid[neighbor.y][neighbor.x]["state"])
 		if state == GridTypeDefs.STATE_HIDDEN:
 			_reveal_at(grid, neighbor, false)
+
+## Tree-safe radius reveal: only traverse along connections up to radius_edges steps.
+## Does NOT reveal blocked cells or unconnected coordinate neighbours.
+static func reveal_connected_radius(grid: Array, center: Vector2i, radius_edges: int) -> void:
+	_reveal_at(grid, center, true)
+
+	if radius_edges <= 0:
+		return
+
+	# BFS limited to radius_edges, only via connections
+	var queue: Array[Vector2i] = []
+	var depths: Dictionary = {}
+	queue.append(center)
+	depths[center] = 0
+
+	while not queue.is_empty():
+		var current: Vector2i = queue.pop_front() as Vector2i
+		var depth: int = int(depths.get(current, 0))
+
+		if depth >= radius_edges:
+			continue
+
+		var cell: Dictionary = grid[current.y][current.x]
+		for conn in cell.get("connections", []):
+			var neighbor := Vector2i(conn.x, conn.y)
+			if not _is_inside_grid(grid, neighbor):
+				continue
+			# skip blocked
+			var ntype := String(grid[neighbor.y][neighbor.x]["type"])
+			if ntype == GridTypeDefs.CELL_BLOCKED:
+				continue
+			if depths.has(neighbor):
+				continue
+			_reveal_at(grid, neighbor, false)
+			depths[neighbor] = depth + 1
+			queue.append(neighbor)
 
 # ──────────────────────────────────────────
 #  Static map (mode = "static")
@@ -671,8 +719,10 @@ static func _take_positions(positions: Array[Vector2i], count: int) -> Array[Vec
 
 static func _target_positions(grid: Array, start_pos: Vector2i) -> Array[Vector2i]:
 	var targets: Array[Vector2i] = []
-	for y in range(grid.size()):
-		for x in range(grid[y].size()):
+	var grid_height: int = _grid_height(grid)
+	var grid_width: int = _grid_width(grid)
+	for y in range(grid_height):
+		for x in range(grid_width):
 			var pos := Vector2i(x, y)
 			if pos == start_pos:
 				continue
@@ -695,14 +745,13 @@ static func _bfs_reachable(grid: Array, start: Vector2i) -> Array[Vector2i]:
 	queue.append(start)
 	while not queue.is_empty():
 		var current: Vector2i = queue.pop_front()
-		# Use connections if available, otherwise fall back to 4-neighbor
 		var connections: Array = grid[current.y][current.x].get("connections", [])
 		if not connections.is_empty():
 			for conn in connections:
 				var neighbor := Vector2i(conn.x, conn.y)
 				if visited.has(neighbor):
 					continue
-				if _is_inside(neighbor, grid.size()):
+				if _is_inside_grid(grid, neighbor):
 					var cell_type := String(grid[neighbor.y][neighbor.x]["type"])
 					if cell_type == GridTypeDefs.CELL_BLOCKED:
 						continue
@@ -712,7 +761,7 @@ static func _bfs_reachable(grid: Array, start: Vector2i) -> Array[Vector2i]:
 			for neighbor: Vector2i in _neighbors(current, grid.size()):
 				if visited.has(neighbor):
 					continue
-				if grid[neighbor.y][neighbor.x]["type"] == GridTypeDefs.CELL_BLOCKED:
+				if String(grid[neighbor.y][neighbor.x]["type"]) == GridTypeDefs.CELL_BLOCKED:
 					continue
 				visited.append(neighbor)
 				queue.append(neighbor)
@@ -734,7 +783,6 @@ static func _apply_initial_fog(grid: Array, start_pos: Vector2i) -> void:
 
 static func reveal_neighbors(grid: Array, pos: Vector2i) -> void:
 	_reveal_at(grid, pos, true)
-	# Use connections if available
 	var connections: Array = grid[pos.y][pos.x].get("connections", [])
 	if not connections.is_empty():
 		for conn in connections:
@@ -746,6 +794,8 @@ static func reveal_neighbors(grid: Array, pos: Vector2i) -> void:
 		for neighbor: Vector2i in _neighbors(pos, grid.size()):
 			_reveal_at(grid, neighbor, false)
 
+## Legacy reveal_ring — only for non-tree (legacy static/random) maps.
+## Tree maps should use reveal_connected_radius() instead.
 static func reveal_ring(grid: Array, pos: Vector2i) -> void:
 	var size := grid.size()
 	for y in range(pos.y - 1, pos.y + 2):

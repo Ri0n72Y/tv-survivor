@@ -10,10 +10,11 @@ const CELL_ELITE := "elite"
 const CELL_BOSS := "boss"
 const CELL_BLOCKED := "blocked"
 
+# state is limited to hidden / revealed / visited.
+# "cleared" state is tracked via cell["cleared"] bool, not via a separate state value.
 const STATE_HIDDEN := "hidden"
 const STATE_REVEALED := "revealed"
 const STATE_VISITED := "visited"
-const STATE_CLEARED := "cleared"
 
 # Minimap colours (lightweight palette)
 const MINIMAP_COLORS := {
@@ -30,7 +31,7 @@ const MINIMAP_COLORS := {
 	"connection": Color(0.28, 0.30, 0.34),
 }
 
-# Battle room types that trigger combat
+# Battle room types that trigger combat (includes task for legacy)
 const BATTLE_ROOMS := [CELL_TASK, CELL_SEARCH, CELL_ELITE, CELL_BOSS]
 
 # Tree-generation battle rooms (excludes task)

@@ -7,5 +7,6 @@ export_presets.cfg
 *.uid
 /android/
 project_summary_*.md
+changes*.md
 flatten-code.cjs
 /release

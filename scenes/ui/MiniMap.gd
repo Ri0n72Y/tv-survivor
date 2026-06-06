@@ -1,5 +1,6 @@
 extends Control
 ## MiniMap — Isaac-style top-right minimap for grid exploration mode.
+## Only displays revealed/visited tree nodes. Skips blocked filler and hidden cells.
 
 func refresh(grid_data: Array, player_pos: Vector2i) -> void:
 	if grid_data.is_empty():
@@ -17,26 +18,56 @@ func _draw() -> void:
 	if grid_width <= 0 or grid_height <= 0:
 		return
 
-	# Calculate cell size to fit in our rect
-	var panel_size := size
-	var cell_size_x: float = floor(panel_size.x / float(grid_width))
-	var cell_size_y: float = floor(panel_size.y / float(grid_height))
-	var cell_size: float = minf(cell_size_x, cell_size_y)
-	if cell_size < 2.0:
-		cell_size = 2.0
+	# Collect visible (in-tree, non-blocked, non-hidden) positions and their bounding box
+	var visible: Array[Vector2i] = []
+	var min_x: int = 99999
+	var min_y: int = 99999
+	var max_x: int = -1
+	var max_y: int = -1
 
-	var offset_x := (panel_size.x - float(grid_width) * cell_size) * 0.5
-	var offset_y := (panel_size.y - float(grid_height) * cell_size) * 0.5
+	for y in range(grid_height):
+		for x in range(grid_width):
+			var cell: Dictionary = grid_data[y][x]
+			var cell_type := String(cell.get("type", GridTypes.CELL_EMPTY))
+			if cell_type == GridTypes.CELL_BLOCKED:
+				continue
+			var state := String(cell.get("state", GridTypes.STATE_HIDDEN))
+			if state == GridTypes.STATE_HIDDEN:
+				continue
+			visible.append(Vector2i(x, y))
+			min_x = mini(min_x, x)
+			min_y = mini(min_y, y)
+			max_x = maxi(max_x, x)
+			max_y = maxi(max_y, y)
+
+	if visible.is_empty():
+		return
+
+	# Calculate cell size to fit into our panel based on visible bounding box
+	var panel_size := size
+	var span_x := max_x - min_x + 1
+	var span_y := max_y - min_y + 1
+
+	var cell_size_x: float = floor(panel_size.x / float(span_x))
+	var cell_size_y: float = floor(panel_size.y / float(span_y))
+	var cell_size: float = minf(cell_size_x, cell_size_y)
+	cell_size = maxf(cell_size, 2.0)
+
+	var offset_x: float = (panel_size.x - float(span_x) * cell_size) * 0.5
+	var offset_y: float = (panel_size.y - float(span_y) * cell_size) * 0.5
 
 	# Draw background
 	draw_rect(Rect2(Vector2.ZERO, panel_size), Color(0.04, 0.04, 0.06, 0.82), true)
 
 	var player_pos := RunState.player_grid_pos
 
-	# Draw connections first (underneath cells)
+	# Draw connections (only between visible nodes where both ends are visible)
 	for y in range(grid_height):
 		for x in range(grid_width):
 			var cell: Dictionary = grid_data[y][x]
+			var cell_type := String(cell.get("type", GridTypes.CELL_EMPTY))
+			if cell_type == GridTypes.CELL_BLOCKED:
+				continue
 			var state := String(cell.get("state", GridTypes.STATE_HIDDEN))
 			if state == GridTypes.STATE_HIDDEN:
 				continue
@@ -45,51 +76,43 @@ func _draw() -> void:
 				var cx := int(conn.x)
 				var cy := int(conn.y)
 				if cy < y or (cy == y and cx < x):
-					# Only draw once per pair
 					continue
 				if cy < 0 or cy >= grid_height or cx < 0 or cx >= grid_width:
 					continue
-				var conn_state := String(grid_data[cy][cx].get("state", GridTypes.STATE_HIDDEN))
-				if conn_state == GridTypes.STATE_HIDDEN:
+				var ntype := String(grid_data[cy][cx].get("type", GridTypes.CELL_EMPTY))
+				if ntype == GridTypes.CELL_BLOCKED:
 					continue
-				var from_rect := _cell_rect(x, y, cell_size, offset_x, offset_y)
-				var to_rect := _cell_rect(cx, cy, cell_size, offset_x, offset_y)
+				var nstate := String(grid_data[cy][cx].get("state", GridTypes.STATE_HIDDEN))
+				if nstate == GridTypes.STATE_HIDDEN:
+					continue
+				var from_rect := _cell_rect(x - min_x, y - min_y, cell_size, offset_x, offset_y)
+				var to_rect := _cell_rect(cx - min_x, cy - min_y, cell_size, offset_x, offset_y)
 				draw_line(from_rect.get_center(), to_rect.get_center(), GridTypes.MINIMAP_COLORS["connection"], 1.0)
 
-	# Draw cells
-	for y in range(grid_height):
-		for x in range(grid_width):
-			var cell: Dictionary = grid_data[y][x]
-			var cell_type := String(cell.get("type", GridTypes.CELL_EMPTY))
-			var state := String(cell.get("state", GridTypes.STATE_HIDDEN))
+	# Draw cells (only visible)
+	for vpos in visible:
+		var x: int = vpos.x
+		var y: int = vpos.y
+		var cell: Dictionary = grid_data[y][x]
+		var cell_type := String(cell.get("type", GridTypes.CELL_EMPTY))
+		var state := String(cell.get("state", GridTypes.STATE_HIDDEN))
 
-			if state == GridTypes.STATE_HIDDEN:
-				# Draw as hidden dot
-				var rect := _cell_rect(x, y, cell_size, offset_x, offset_y)
-				draw_rect(rect, GridTypes.MINIMAP_COLORS["hidden"], true)
-				continue
+		var color: Color = GridTypes.MINIMAP_COLORS.get(cell_type, GridTypes.MINIMAP_COLORS["revealed"])
+		if state == GridTypes.STATE_VISITED and cell_type == GridTypes.CELL_EMPTY:
+			color = GridTypes.MINIMAP_COLORS["visited"]
 
-			var color: Color = GridTypes.MINIMAP_COLORS.get(cell_type, GridTypes.MINIMAP_COLORS["revealed"])
-			if state == GridTypes.STATE_VISITED and cell_type == GridTypes.CELL_EMPTY:
-				color = GridTypes.MINIMAP_COLORS["visited"]
+		var rect := _cell_rect(x - min_x, y - min_y, cell_size, offset_x, offset_y)
+		draw_rect(rect, color, true)
 
-			var rect := _cell_rect(x, y, cell_size, offset_x, offset_y)
-			draw_rect(rect, color, true)
-
-			# Player position highlight
-			if Vector2i(x, y) == player_pos:
-				draw_rect(rect, GridTypes.MINIMAP_COLORS["current"], true)
-				# White border
-				draw_rect(rect, Color.WHITE, false, 1.0)
+		if Vector2i(x, y) == player_pos:
+			draw_rect(rect, GridTypes.MINIMAP_COLORS["current"], true)
+			draw_rect(rect, Color.WHITE, false, 1.0)
 
 func _cell_rect(x: int, y: int, cell_size: float, offset_x: float, offset_y: float) -> Rect2:
-	var margin := maxf(1.0, cell_size * 0.15)
+	var margin: float = maxf(1.0, cell_size * 0.15)
 	return Rect2(
 		offset_x + float(x) * cell_size + margin,
 		offset_y + float(y) * cell_size + margin,
 		cell_size - margin * 2.0,
 		cell_size - margin * 2.0
 	)
-
-func _get_color_for_type(cell_type: String) -> Color:
-	return GridTypes.MINIMAP_COLORS.get(cell_type, Color.GRAY)
