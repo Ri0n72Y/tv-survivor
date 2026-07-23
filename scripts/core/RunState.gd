@@ -1,12 +1,14 @@
 extends Node
 
-const Constants = preload("res://scripts/core/Constants.gd")
 const RunRngManagerScript = preload("res://scripts/core/RunRngManager.gd")
+const BuildStateScript = preload("res://scripts/build/BuildState.gd")
+const BattleContextScript = preload("res://scripts/battle/BattleContext.gd")
 
 var grid_seed: int = 0
 var pending_grid_seed_text := ""
 var rng_manager: RunRngManager = RunRngManagerScript.new()
 var visual_rng := RandomNumberGenerator.new()
+var build_state: BuildState = BuildStateScript.new()
 
 var grid_size: int = 6
 var player_grid_pos: Vector2i = Vector2i.ZERO
@@ -17,33 +19,52 @@ var current_battle_room_type: String = ""
 
 var completed_tasks: int = 0
 var total_tasks: int = 3
-
 var next_battle_initial_sync: float = 100.0
-
-var gold: int = 0
-var total_score: int = 0
-
-var weapon_slots: int = 4
-var passive_slots: int = 4
-
-var main_weapon_id: String = "projectile"
-
-var weapons := {
-	"projectile": 1,
-}
-
-var passives := {}
-
 var grid_data: Array = []
 
-const PASSIVE_IDS: Array[String] = [
-	"move_speed",
-	"damage_bonus",
-	"cooldown_bonus",
-	"pickup_bonus",
-	"sync_bonus",
-	"gold_bonus",
-]
+# Compatibility properties keep existing gameplay scripts stable while build
+# ownership moves out of the global run coordinator.
+var gold: int:
+	get:
+		return build_state.gold
+	set(value):
+		build_state.gold = value
+
+var total_score: int:
+	get:
+		return build_state.total_score
+	set(value):
+		build_state.total_score = value
+
+var weapon_slots: int:
+	get:
+		return build_state.weapon_slots
+	set(value):
+		build_state.weapon_slots = value
+
+var passive_slots: int:
+	get:
+		return build_state.passive_slots
+	set(value):
+		build_state.passive_slots = value
+
+var main_weapon_id: String:
+	get:
+		return build_state.main_weapon_id
+	set(value):
+		build_state.main_weapon_id = value
+
+var weapons: Dictionary:
+	get:
+		return build_state.weapons
+	set(value):
+		build_state.weapons = value
+
+var passives: Dictionary:
+	get:
+		return build_state.passives
+	set(value):
+		build_state.passives = value
 
 func reset_run(seed_value: Variant = null) -> void:
 	grid_seed = _resolve_next_seed(seed_value)
@@ -51,18 +72,8 @@ func reset_run(seed_value: Variant = null) -> void:
 	rng_manager.start_run(grid_seed)
 	completed_tasks = 0
 	total_tasks = 3
-	gold = 0
-	total_score = 0
 	next_battle_initial_sync = 100.0
-
-	weapon_slots = 4
-	passive_slots = Constants.BASE_PASSIVE_SLOTS
-
-	main_weapon_id = "projectile"
-	weapons = {
-		"projectile": 1,
-	}
-	passives = {}
+	build_state.reset()
 
 	grid_data = []
 	player_grid_pos = Vector2i.ZERO
@@ -73,6 +84,15 @@ func reset_run(seed_value: Variant = null) -> void:
 
 func begin_battle() -> void:
 	pass
+
+func create_battle_context() -> BattleContext:
+	return BattleContextScript.create(
+		current_battle_room_type,
+		current_task_pos,
+		next_battle_initial_sync,
+		get_player_difficulty_level(),
+		grid_seed
+	)
 
 func ensure_rng_started() -> void:
 	if rng_manager == null:
@@ -103,71 +123,52 @@ func _resolve_next_seed(seed_value: Variant = null) -> int:
 	return visual_rng.randi_range(1, 2147483647)
 
 func get_weapon_level(weapon_id: String) -> int:
-	return int(weapons.get(weapon_id, 0))
+	return build_state.get_weapon_level(weapon_id)
 
 func get_weapon_count() -> int:
-	var count := 0
-	for weapon_id in weapons.keys():
-		if int(weapons[weapon_id]) > 0:
-			count += 1
-	return count
+	return build_state.get_weapon_count()
 
 func get_total_weapon_level() -> int:
-	var total := 0
-	for weapon_id in weapons.keys():
-		total += maxi(0, int(weapons[weapon_id]))
-	return total
+	return build_state.get_total_weapon_level()
 
 func get_passive_count() -> int:
-	var count := 0
-	for passive_id in passives.keys():
-		if int(passives[passive_id]) > 0:
-			count += 1
-	return count
+	return build_state.get_passive_count()
 
 func get_total_passive_level() -> int:
-	var total := 0
-	for passive_id in passives.keys():
-		total += maxi(0, int(passives[passive_id]))
-	return total
+	return build_state.get_total_passive_level()
 
 func get_total_upgrade_level() -> int:
-	return get_total_weapon_level() + get_total_passive_level()
+	return build_state.get_total_upgrade_level()
 
 func get_player_difficulty_level() -> int:
-	var total_level := get_total_upgrade_level()
-	if total_level <= 1:
-		return 0
-	return int(floor(log(float(total_level)) / log(Constants.PLAYER_LEVEL_DIFFICULTY_LOG_BASE)))
+	return build_state.get_player_difficulty_level()
 
 func get_passive_level(passive_id: String) -> int:
-	return int(passives.get(passive_id, 0))
+	return build_state.get_passive_level(passive_id)
 
 func set_passive_level(passive_id: String, level: int) -> void:
-	if not PASSIVE_IDS.has(passive_id):
-		return
-	passives[passive_id] = clampi(level, 0, 3)
+	build_state.set_passive_level(passive_id, level)
 
 func get_damage_multiplier() -> float:
-	return 1.0 + float(get_passive_level("damage_bonus")) * 0.12
+	return build_state.get_damage_multiplier()
 
 func get_cooldown_multiplier() -> float:
-	return maxf(0.5, 1.0 - float(get_passive_level("cooldown_bonus")) * 0.08)
+	return build_state.get_cooldown_multiplier()
 
 func get_move_speed_multiplier() -> float:
-	return 1.0 + float(get_passive_level("move_speed")) * 0.08
+	return build_state.get_move_speed_multiplier()
 
 func get_pickup_radius_multiplier() -> float:
-	return 1.0 + float(get_passive_level("pickup_bonus")) * 0.25
+	return build_state.get_pickup_radius_multiplier()
 
 func get_sync_max() -> float:
-	return Constants.SYNC_MAX + float(get_passive_level("sync_bonus")) * 10.0
+	return build_state.get_sync_max()
 
 func get_sync_regen_multiplier() -> float:
-	return 1.0 + float(get_passive_level("sync_bonus")) * 0.20
+	return build_state.get_sync_regen_multiplier()
 
 func get_gold_multiplier() -> float:
-	return 1.0 + float(get_passive_level("gold_bonus")) * 0.15
+	return build_state.get_gold_multiplier()
 
 func apply_gold_gain(base_points: int) -> int:
-	return maxi(1, int(round(float(base_points) * get_gold_multiplier())))
+	return build_state.apply_gold_gain(base_points)
