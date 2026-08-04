@@ -1,9 +1,6 @@
 extends Node2D
 class_name WeaponManager
 
-const AURA_WEAPON_SCENE := preload("res://scenes/weapons/AuraWeapon.tscn")
-const BEAM_WEAPON_SCENE := preload("res://scenes/weapons/BeamWeapon.tscn")
-
 var player: Node2D
 var enemy_provider: Callable
 
@@ -20,22 +17,20 @@ func get_enemies() -> Array:
 func _start_weapons() -> void:
 	for child in get_children():
 		child.queue_free()
-	if RunState.get_weapon_level("aura") > 0:
-		var aura := AURA_WEAPON_SCENE.instantiate()
-		add_child(aura)
-		aura.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("aura"))
-	if RunState.get_weapon_level("projectile") > 0:
-		var projectile := ProjectileWeapon.new()
-		add_child(projectile)
-		projectile.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("projectile"))
-	if RunState.get_weapon_level("shape") > 0:
-		var shape := ShapeWeapon.new()
-		add_child(shape)
-		shape.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("shape"))
-	if RunState.get_weapon_level("beam") > 0:
-		var beam := BEAM_WEAPON_SCENE.instantiate()
-		add_child(beam)
-		beam.setup(player, Callable(self, "get_enemies"), RunState.get_weapon_level("beam"))
+	for weapon_id in WeaponDefinitions.get_ids():
+		var level := RunState.get_weapon_level(weapon_id)
+		if level <= 0:
+			continue
+		var weapon := WeaponDefinitions.instantiate_runtime(weapon_id)
+		if weapon == null:
+			push_error("Weapon '%s' has no valid runtime implementation." % weapon_id)
+			continue
+		if not weapon.has_method("setup"):
+			push_error("Weapon '%s' runtime must implement setup(player, enemy_provider, level)." % weapon_id)
+			weapon.free()
+			continue
+		add_child(weapon)
+		weapon.call("setup", player, Callable(self, "get_enemies"), level)
 
 func refresh_weapons() -> void:
 	_start_weapons()

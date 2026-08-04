@@ -1,6 +1,7 @@
 extends Node2D
+class_name BattleScene
 
-signal battle_finished(success: bool, final_sync_rate: float)
+signal battle_result_finished(result: BattleResult)
 signal restart_requested
 
 const Constants = preload("res://scripts/core/Constants.gd")
@@ -19,10 +20,12 @@ const BATTLE_ALTAR_SCENE := preload("res://scenes/battle/BattleAltar.tscn")
 const BATTLE_CHEST_SCENE := preload("res://scenes/battle/BattleChest.tscn")
 const EXTRACTION_POINT_SCENE := preload("res://scenes/battle/ExtractionPoint.tscn")
 const ELITE_ENEMY_SCENE := preload("res://scenes/enemies/EliteEnemy.tscn")
-const WEAPON_IDS: Array[String] = ["projectile", "aura", "shape", "beam"]
 const PLAYER_BUFF_OWNER_ID := "player"
 const BUFF_SIGNAL_LOSS := "signal_loss"
 const BUFF_SYNC_STABLE := "sync_stable"
+
+var battle_context: BattleContext
+var battle_gold_collected: int = 0
 
 var signal_center := Vector2(640, 360)
 var player: PlayerAvatar
@@ -67,14 +70,18 @@ var pending_finish_after_reward := false
 var player_hit_invulnerability_seconds := Constants.PLAYER_HIT_INVULNERABILITY_SECONDS
 var player_hit_invulnerability_left := 0.0
 
+func configure(context: BattleContext) -> void:
+	battle_context = context.duplicate_value() if context != null else null
+
 func _ready() -> void:
 	RunState.ensure_rng_started()
-	RunState.begin_battle()
-	battle_room_type = RunState.current_battle_room_type if RunState.current_battle_room_type != "" else GridTypes.CELL_TASK
+	if battle_context == null:
+		battle_context = RunState.create_battle_context()
+	battle_room_type = battle_context.room_type
 	room_rules = RoomRules.for_room_type(battle_room_type)
 	_setup_buffs()
 	_build_scene()
-	sync_controller.setup(RunState.next_battle_initial_sync)
+	sync_controller.setup(battle_context.initial_sync)
 	_update_difficulty()
 	spawner.start()
 	_update_hud()
@@ -89,7 +96,7 @@ func _process(delta: float) -> void:
 		restart_requested.emit()
 		return
 	if Input.is_key_pressed(KEY_ESCAPE):
-		# Debug-only escape hatch for fast editor iteration; not part of formal win/loss flow.
+		# Debug-only escape hatch for fast editor iteration; not part of formal gameplay.
 		_finish(false)
 		return
 	battle_elapsed += delta
@@ -376,7 +383,19 @@ func _update_hud() -> void:
 			break
 	var phase_text := _get_phase_text()
 	if hud.has_method("update_hud"):
-		hud.update_hud(sync_controller.sync_rate, sync_controller.signal_text, phase_text, RunState.weapons, elite_ratio, RunState.gold, _uses_sync(), battle_room_type, _get_objective_text(), room_status_text, player_buffs.get_display_buffs())
+		hud.update_hud(
+			sync_controller.sync_rate,
+			sync_controller.signal_text,
+			phase_text,
+			RunState.get_build_snapshot(),
+			elite_ratio,
+			RunState.gold,
+			_uses_sync(),
+			battle_room_type,
+			_get_objective_text(),
+			room_status_text,
+			player_buffs.get_display_buffs()
+		)
 
 func _get_phase_text() -> String:
 	if battle_room_type == GridTypes.CELL_BOSS:
@@ -412,14 +431,12 @@ func _get_objective_text() -> String:
 			return "目标：存活 30 秒并完成撤离"
 
 func _try_open_battle_chest(chest: BattleChest) -> void:
-	if _build_reward_pool().is_empty():
+	if RunState.build_reward_pool().is_empty():
 		room_status_text = "没有可用奖励。"
 		return
-	var cost := chest.cost
-	if RunState.gold < cost:
-		room_status_text = "金币不足：打开战斗宝箱需要 %d 金币。" % cost
+	if not RunState.spend_gold(chest.cost):
+		room_status_text = "金币不足：打开战斗宝箱需要 %d 金币。" % chest.cost
 		return
-	RunState.gold -= cost
 	chest.mark_opened()
 	pending_reward_chest = chest
 	_show_reward_choices("战斗宝箱", false)
@@ -470,10 +487,7 @@ func _on_enemy_spawned(enemy: Node) -> void:
 func _on_enemy_died(enemy: Node) -> void:
 	var is_boss := enemy is BossEnemy
 	var is_elite := enemy is EliteEnemy
-	if is_elite or is_boss:
-		RunState.total_score += Constants.SCORE_ELITE_KILL
-	else:
-		RunState.total_score += Constants.SCORE_SMALL_KILL
+	RunState.total_score += Constants.SCORE_ELITE_KILL if is_elite or is_boss else Constants.SCORE_SMALL_KILL
 	var drop_points := Constants.SCORE_SMALL_DROP
 	if is_boss:
 		drop_points = Constants.BOSS_GOLD
@@ -508,9 +522,8 @@ func _spawn_drop(drop_position: Vector2, points: int) -> void:
 
 func _on_drop_collected(drop: Node, points: int) -> void:
 	drops.erase(drop)
-	var earned := RunState.apply_gold_gain(points)
-	RunState.gold += earned
-	RunState.total_score += earned
+	var earned := RunState.add_gold(points)
+	battle_gold_collected += earned
 
 func _collect_all_drops() -> void:
 	for drop in drops.duplicate():
@@ -529,9 +542,8 @@ func _on_player_damaged(amount: float) -> void:
 	_apply_player_damage(amount, true)
 
 func _apply_player_damage(amount: float, respect_invulnerability: bool) -> void:
-	if player_hit_invulnerability_left > 0.0:
-		if respect_invulnerability:
-			return
+	if player_hit_invulnerability_left > 0.0 and respect_invulnerability:
+		return
 	player_hit_invulnerability_left = player_hit_invulnerability_seconds
 	if player != null and player.has_method("play_hit_feedback"):
 		player.play_hit_feedback(player_hit_invulnerability_seconds)
@@ -559,7 +571,7 @@ func _get_pending_reward_cost() -> int:
 	return Constants.NORMAL_CHEST_COST
 
 func _roll_reward_choices() -> Array[Dictionary]:
-	var choices := _build_reward_pool()
+	var choices := RunState.build_reward_pool()
 	var stream_name := RunRngManagerScript.STREAM_CHEST_REWARD
 	if pending_finish_after_reward:
 		stream_name = RunRngManagerScript.STREAM_WEAPON_REWARD
@@ -572,122 +584,21 @@ func _roll_reward_choices() -> Array[Dictionary]:
 		result.append(choice as Dictionary)
 	return result
 
-func _build_reward_pool() -> Array[Dictionary]:
-	var pool: Array[Dictionary] = []
-	for weapon_id in WEAPON_IDS:
-		var weapon_level := RunState.get_weapon_level(weapon_id)
-		if weapon_level > 0 and weapon_level < 3:
-			pool.append(_weapon_reward(weapon_id, weapon_level + 1, "升级武器"))
-		elif weapon_level <= 0 and RunState.get_weapon_count() < RunState.weapon_slots:
-			pool.append(_weapon_reward(weapon_id, 1, "新武器"))
-	for passive_id in RunState.PASSIVE_IDS:
-		var passive_level := RunState.get_passive_level(passive_id)
-		if passive_level > 0 and passive_level < 3:
-			pool.append(_passive_reward(passive_id, passive_level + 1, "升级被动"))
-		elif passive_level <= 0 and RunState.get_passive_count() < RunState.passive_slots:
-			pool.append(_passive_reward(passive_id, 1, "新被动"))
-	return pool
-
-func _weapon_reward(weapon_id: String, level: int, prefix: String) -> Dictionary:
-	return {
-		"id": "weapon:%s:%d" % [weapon_id, level],
-		"kind": "weapon",
-		"weapon_id": weapon_id,
-		"level": level,
-		"weight": 1.0,
-		"tags": ["weapon", weapon_id],
-		"label": "%s\n%s Lv.%d" % [prefix, _weapon_display_name(weapon_id), level],
-	}
-
-func _passive_reward(passive_id: String, level: int, prefix: String) -> Dictionary:
-	return {
-		"id": "passive:%s:%d" % [passive_id, level],
-		"kind": "passive",
-		"passive_id": passive_id,
-		"level": level,
-		"weight": 1.0,
-		"tags": ["passive", passive_id],
-		"label": "%s\n%s Lv.%d\n%s" % [prefix, _passive_display_name(passive_id), level, _passive_stats_text(passive_id, level)],
-	}
-
 func _choose_reward(choice: Dictionary) -> void:
-	match String(choice.get("kind", "")):
-		"weapon":
-			var weapon_id := String(choice.get("weapon_id", "projectile"))
-			RunState.weapons[weapon_id] = clampi(int(choice.get("level", 1)), 1, 3)
-			weapon_manager.refresh_weapons()
-			room_status_text = "%s 提升到 Lv.%d。" % [_weapon_display_name(weapon_id), RunState.get_weapon_level(weapon_id)]
-		"passive":
-			var passive_id := String(choice.get("passive_id", "move_speed"))
-			RunState.set_passive_level(passive_id, int(choice.get("level", 1)))
-			sync_controller.sync_rate = minf(sync_controller.sync_rate, RunState.get_sync_max())
-			room_status_text = "%s 提升到 Lv.%d。" % [_passive_display_name(passive_id), RunState.get_passive_level(passive_id)]
+	var is_free_reward := pending_finish_after_reward
+	var result := RunState.apply_reward(choice)
+	if bool(result.get("success", false)):
+		weapon_manager.refresh_weapons()
+		sync_controller.sync_rate = minf(sync_controller.sync_rate, RunState.get_sync_max())
+		room_status_text = "%s。" % String(result.get("message", "获得奖励"))
+	else:
+		room_status_text = String(result.get("message", "奖励应用失败。"))
 	reward_overlay.hide_overlay()
 	get_tree().paused = false
 	pending_reward_chest = null
-	if pending_finish_after_reward:
+	if is_free_reward:
 		pending_finish_after_reward = false
 		_finish(true)
-
-func _upgradable_existing_weapons() -> Array[String]:
-	var result: Array[String] = []
-	for weapon_id in WEAPON_IDS:
-		if RunState.get_weapon_level(weapon_id) > 0 and RunState.get_weapon_level(weapon_id) < 3:
-			result.append(weapon_id)
-	return result
-
-func _available_new_weapons() -> Array[String]:
-	var result: Array[String] = []
-	if RunState.get_weapon_count() >= RunState.weapon_slots:
-		return result
-	for weapon_id in WEAPON_IDS:
-		if RunState.get_weapon_level(weapon_id) <= 0:
-			result.append(weapon_id)
-	return result
-
-func _weapon_display_name(weapon_id: String) -> String:
-	match weapon_id:
-		"aura":
-			return "光环"
-		"projectile":
-			return "基础弹"
-		"shape":
-			return "固定形状"
-		"beam":
-			return "射线"
-	return weapon_id
-
-func _passive_display_name(passive_id: String) -> String:
-	match passive_id:
-		"move_speed":
-			return "移动速度"
-		"damage_bonus":
-			return "全武器伤害"
-		"cooldown_bonus":
-			return "冷却缩短"
-		"pickup_bonus":
-			return "金币吸附"
-		"sync_bonus":
-			return "同步强化"
-		"gold_bonus":
-			return "金币收益"
-	return passive_id
-
-func _passive_stats_text(passive_id: String, level: int) -> String:
-	match passive_id:
-		"move_speed":
-			return "移动速度 +%d%%" % int(level * 8)
-		"damage_bonus":
-			return "全武器伤害 +%d%%" % int(level * 12)
-		"cooldown_bonus":
-			return "武器冷却 -%d%%" % int(level * 8)
-		"pickup_bonus":
-			return "金币吸附范围 +%d%%" % int(level * 25)
-		"sync_bonus":
-			return "同步上限 +%d，恢复 +%d%%" % [level * 10, level * 20]
-		"gold_bonus":
-			return "金币收益 +%d%%" % int(level * 15)
-	return ""
 
 func get_enemies() -> Array:
 	enemies = enemies.filter(func(enemy: Node) -> bool: return is_instance_valid(enemy))
@@ -706,6 +617,49 @@ func _finish(success: bool) -> void:
 	if reward_overlay != null:
 		reward_overlay.hide_overlay()
 	get_tree().paused = false
-	spawner.stop()
-	var final_sync_rate := sync_controller.sync_rate if _uses_sync() else RunState.next_battle_initial_sync
-	battle_finished.emit(success, final_sync_rate)
+	if spawner != null:
+		spawner.stop()
+	var final_sync := sync_controller.sync_rate if _uses_sync() else battle_context.initial_sync
+	var effects := _build_result_effects(success, final_sync)
+	var result: BattleResult
+	if success:
+		result = BattleResult.success(
+			battle_context.room_definition_id,
+			battle_context.room_instance_id,
+			battle_context.room_type,
+			battle_context.room_position,
+			final_sync,
+			battle_gold_collected,
+			effects
+		)
+	else:
+		result = BattleResult.failure(
+			battle_context.room_definition_id,
+			battle_context.room_instance_id,
+			battle_context.room_type,
+			battle_context.room_position,
+			final_sync,
+			battle_gold_collected,
+			effects
+		)
+	battle_result_finished.emit(result)
+
+func _build_result_effects(success: bool, final_sync: float) -> Array[BattleEffect]:
+	var effects: Array[BattleEffect] = []
+	var next_sync := 100.0
+	var message := ""
+	if success:
+		effects.append(BattleEffect.clear_room())
+		if _uses_sync() and final_sync >= 80.0:
+			effects.append(BattleEffect.reveal_ring())
+		if _uses_sync() and final_sync < 30.0:
+			next_sync = 70.0
+		message = "战斗成功，同步率 %.0f" % final_sync if _uses_sync() else "战斗成功，竞技场已清理。"
+	else:
+		effects.append(BattleEffect.rollback_position())
+		message = "战斗失败，返回上一个格子。"
+	effects.append(BattleEffect.set_next_sync(next_sync))
+	effects.append(BattleEffect.reveal_neighbors())
+	effects.append(BattleEffect.clear_transition())
+	effects.append(BattleEffect.result_message(message))
+	return effects
