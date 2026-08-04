@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="PassiveDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/PassiveDefinition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = &"gold_bonus"
+display_name = "金币收益"
+max_level = 3
+sort_order = 50
+tags = PackedStringArray("passive", "attribute")
+attribute_ids = PackedStringArray("gold_multiplier")
+add_per_level = PackedFloat32Array(0.15)
+level_descriptions = PackedStringArray("", "金币收益 +15%", "金币收益 +30%", "金币收益 +45%")

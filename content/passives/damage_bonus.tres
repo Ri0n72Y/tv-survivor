@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="PassiveDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/PassiveDefinition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = &"damage_bonus"
+display_name = "全武器伤害"
+max_level = 3
+sort_order = 10
+tags = PackedStringArray("passive", "attribute")
+attribute_ids = PackedStringArray("damage_multiplier")
+add_per_level = PackedFloat32Array(0.12)
+level_descriptions = PackedStringArray("", "全武器伤害 +12%", "全武器伤害 +24%", "全武器伤害 +36%")

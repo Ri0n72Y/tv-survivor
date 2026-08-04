@@ -4,7 +4,7 @@ const GRID_SCENE := preload("res://scenes/grid/GridScene.tscn")
 const BATTLE_SCENE := preload("res://scenes/battle/BattleScene.tscn")
 
 var current_scene: Node
-var grid_scene: Node
+var grid_scene: GridScene
 
 func _ready() -> void:
 	RunState.reset_run()
@@ -12,7 +12,10 @@ func _ready() -> void:
 
 func _show_grid() -> void:
 	_clear_current_scene()
-	grid_scene = GRID_SCENE.instantiate()
+	grid_scene = GRID_SCENE.instantiate() as GridScene
+	if grid_scene == null:
+		push_error("GridScene.tscn must use GridScene.gd.")
+		return
 	current_scene = grid_scene
 	add_child(grid_scene)
 	grid_scene.enter_battle_requested.connect(_show_battle)
@@ -20,18 +23,30 @@ func _show_grid() -> void:
 
 func _show_battle() -> void:
 	_clear_current_scene()
-	var battle_scene := BATTLE_SCENE.instantiate()
+	var context := _create_current_battle_context()
+	var battle_scene := BATTLE_SCENE.instantiate() as BattleScene
+	if battle_scene == null:
+		push_error("BattleScene.tscn must use BattleScene.gd.")
+		_show_grid()
+		return
+	battle_scene.configure(context)
+	battle_scene.battle_result_finished.connect(_on_battle_result)
+	battle_scene.restart_requested.connect(_restart_run)
 	current_scene = battle_scene
 	add_child(battle_scene)
-	battle_scene.battle_finished.connect(_on_battle_finished)
-	battle_scene.restart_requested.connect(_restart_run)
 
-func _on_battle_finished(success: bool, final_sync_rate: float) -> void:
-	if not success:
-		RunState.player_grid_pos = RunState.previous_grid_pos
+func _create_current_battle_context() -> BattleContext:
+	var room_definition_id := RunState.current_battle_room_type
+	var pos := RunState.current_task_pos
+	if pos.y >= 0 and pos.y < RunState.grid_data.size() and pos.x >= 0 and pos.x < RunState.grid_data[pos.y].size():
+		var cell: Dictionary = RunState.grid_data[pos.y][pos.x]
+		room_definition_id = String(cell.get("definition_id", cell.get("type", room_definition_id))).strip_edges()
+	return RunState.create_battle_context(room_definition_id)
+
+func _on_battle_result(result: BattleResult) -> void:
 	_show_grid()
-	if grid_scene.has_method("handle_battle_result"):
-		grid_scene.handle_battle_result(success, final_sync_rate)
+	if grid_scene != null:
+		grid_scene.apply_battle_result(result)
 
 func _restart_run() -> void:
 	RunState.reset_run()

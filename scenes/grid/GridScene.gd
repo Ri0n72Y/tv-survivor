@@ -1,4 +1,5 @@
 extends Control
+class_name GridScene
 
 signal enter_battle_requested
 signal restart_requested
@@ -8,21 +9,17 @@ const RunRngManagerScript = preload("res://scripts/core/RunRngManager.gd")
 const CELL_SCENE := preload("res://scenes/grid/GridCellView.tscn")
 const MINIMAP_SCENE := preload("res://scenes/ui/MiniMap.tscn")
 const REWARD_OVERLAY_SCENE := preload("res://scenes/ui/RewardOverlay.tscn")
-const WEAPON_IDS: Array[String] = ["projectile", "aura", "shape", "beam"]
 
 var cells: Array = []
 var pending_chest_cell: Dictionary = {}
 var reward_overlay: RewardOverlay
 var minimap: Node
-
 var input_locked := false
 var move_tween: Tween
 
-@onready var title_label: Label = $Root/InfoColumn/TitleLabel
 @onready var progress_label: Label = $Root/InfoColumn/ProgressLabel
 @onready var weapon_label: Label = $Root/InfoColumn/WeaponLabel
 @onready var score_label: Label = $Root/InfoColumn/ScoreLabel
-@onready var guide_label: Label = $Root/InfoColumn/GuideLabel
 @onready var message_label: Label = $Root/InfoColumn/MessageLabel
 @onready var map_viewport: Control = $Root/PlayColumn/GridPanel/MapViewport
 @onready var map_container: Control = $Root/PlayColumn/GridPanel/MapViewport/MapContainer
@@ -47,40 +44,13 @@ func _ready() -> void:
 	_refresh_all()
 	_center_camera_instant()
 
-func handle_battle_result(success: bool, final_sync_rate: float) -> void:
-	var room_pos: Vector2i = RunState.current_task_pos
-	var room_type := RunState.current_battle_room_type
-	if success and _is_inside(room_pos):
-		var cell: Dictionary = RunState.grid_data[room_pos.y][room_pos.x]
-		if not bool(cell.get("cleared", false)):
-			cell["cleared"] = true
-			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_TASK:
-				RunState.completed_tasks += 1
-		if RoomRules.uses_sync(room_type):
-			if final_sync_rate >= 80.0:
-				_reveal_tree_safe(RunState.grid_data, room_pos, 1)
-			RunState.next_battle_initial_sync = 70.0 if final_sync_rate < 30.0 else 100.0
-			message_label.text = "战斗成功，同步率 %.0f" % final_sync_rate
-		else:
-			RunState.next_battle_initial_sync = 100.0
-			message_label.text = "战斗成功，竞技场已清理。"
-	else:
-		RunState.player_grid_pos = RunState.previous_grid_pos
-		RunState.next_battle_initial_sync = 100.0
-		message_label.text = "战斗失败，返回上一个格子。"
-	RunState.current_task_pos = Vector2i(-1, -1)
-	RunState.current_room_cell = Vector2i.ZERO
-	RunState.current_battle_room_type = ""
+func apply_battle_result(result: BattleResult) -> void:
+	message_label.text = BattleResultApplicator.apply(result)
 	_reveal_connections(RunState.player_grid_pos)
+	input_locked = false
+	get_tree().paused = false
 	_refresh_all()
 	_center_camera_instant()
-
-func _reveal_tree_safe(grid: Array, pos: Vector2i, radius: int) -> void:
-	var conns: Array = grid[pos.y][pos.x].get("connections", [])
-	if not conns.is_empty():
-		GridGenerator.reveal_connected_radius(grid, pos, radius)
-	else:
-		GridGenerator.reveal_ring(grid, pos)
 
 func _build_ui() -> void:
 	grid_container.columns = _grid_cols()
@@ -98,9 +68,10 @@ func _build_ui() -> void:
 	_build_minimap()
 
 func _build_minimap() -> void:
-	if RunState.minimap_unlocked:
-		minimap = MINIMAP_SCENE.instantiate()
-		add_child(minimap)
+	if not RunState.minimap_unlocked:
+		return
+	minimap = MINIMAP_SCENE.instantiate()
+	add_child(minimap)
 
 func _on_restart_pressed() -> void:
 	if not _apply_seed_input():
@@ -151,44 +122,54 @@ func _refresh_all() -> void:
 func _refresh_labels() -> void:
 	var boss_total := _count_cells(GridTypes.CELL_BOSS)
 	var boss_cleared := _count_cleared_cells(GridTypes.CELL_BOSS)
-	var total: int = _count_tree_nodes() if _is_tree_mode() else GridGenerator._grid_height(RunState.grid_data) * GridGenerator._grid_width(RunState.grid_data)
-	var explored := _count_revealed_tree_nodes()
-	var cleared := _count_tree_cleared()
+	var total := _count_tree_nodes() if _is_tree_mode() else RunState.grid_data.size() * _grid_cols()
+	var explored := _count_revealed_nodes()
+	var cleared := _count_cleared_nodes()
 	progress_label.text = "Boss：%d/%d  已清理：%d  已探索：%d/%d" % [boss_cleared, boss_total, cleared, explored, total]
-	weapon_label.text = "武器：%d/%d  基础弹 Lv.%d  光环 Lv.%d  固定形状 Lv.%d  射线 Lv.%d\n被动：%d/%d  移速 Lv.%d  伤害 Lv.%d  冷却 Lv.%d  吸附 Lv.%d  同步 Lv.%d  金币 Lv.%d" % [RunState.get_weapon_count(), RunState.weapon_slots, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam"), RunState.get_passive_count(), RunState.passive_slots, RunState.get_passive_level("move_speed"), RunState.get_passive_level("damage_bonus"), RunState.get_passive_level("cooldown_bonus"), RunState.get_passive_level("pickup_bonus"), RunState.get_passive_level("sync_bonus"), RunState.get_passive_level("gold_bonus")]
+
+	var weapon_parts: Array[String] = []
+	for weapon_id in WeaponDefinitions.get_ids():
+		weapon_parts.append("%s Lv.%d" % [WeaponDefinitions.get_display_name(weapon_id), RunState.get_weapon_level(weapon_id)])
+	var passive_parts: Array[String] = []
+	for passive_id in PassiveDefinitions.get_ids():
+		passive_parts.append("%s Lv.%d" % [PassiveDefinitions.get_display_name(passive_id), RunState.get_passive_level(passive_id)])
+	weapon_label.text = "武器：%d/%d  %s\n被动：%d/%d  %s" % [
+		RunState.get_weapon_count(),
+		RunState.weapon_slots,
+		" / ".join(weapon_parts),
+		RunState.get_passive_count(),
+		RunState.passive_slots,
+		" / ".join(passive_parts),
+	]
 	score_label.text = "金币：%d" % RunState.gold
 
 func _is_tree_mode() -> bool:
 	for row in RunState.grid_data:
 		for cell in row:
-			var conns: Array = cell.get("connections", [])
-			if not conns.is_empty():
+			if not (cell.get("connections", []) as Array).is_empty():
 				return true
 	return false
 
 func _count_tree_nodes() -> int:
-	var count: int = 0
+	var count := 0
 	for row in RunState.grid_data:
 		for cell in row:
-			var t := String(cell.get("type", GridTypes.CELL_EMPTY))
-			if t != GridTypes.CELL_BLOCKED:
+			if String(cell.get("type", GridTypes.CELL_EMPTY)) != GridTypes.CELL_BLOCKED:
 				count += 1
 	return count
 
-func _count_revealed_tree_nodes() -> int:
-	var count: int = 0
+func _count_revealed_nodes() -> int:
+	var count := 0
 	for row in RunState.grid_data:
 		for cell in row:
-			var t := String(cell.get("type", GridTypes.CELL_EMPTY))
-			if t == GridTypes.CELL_BLOCKED:
+			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_BLOCKED:
 				continue
-			var s := String(cell.get("state", GridTypes.STATE_HIDDEN))
-			if s != GridTypes.STATE_HIDDEN:
+			if String(cell.get("state", GridTypes.STATE_HIDDEN)) != GridTypes.STATE_HIDDEN:
 				count += 1
 	return count
 
-func _count_tree_cleared() -> int:
-	var count: int = 0
+func _count_cleared_nodes() -> int:
+	var count := 0
 	for row in RunState.grid_data:
 		for cell in row:
 			if bool(cell.get("cleared", false)):
@@ -200,40 +181,33 @@ func _refresh_grid() -> void:
 		child.queue_free()
 	cells.clear()
 	grid_container.columns = _grid_cols()
-	var grid_height: int = RunState.grid_data.size() as int
-	var grid_width: int = _grid_cols()
-	for y in range(grid_height):
-		for x in range(grid_width):
+	for y in range(RunState.grid_data.size()):
+		for x in range(RunState.grid_data[y].size()):
 			var pos := Vector2i(x, y)
 			var cell: Dictionary = RunState.grid_data[y][x]
 			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_CHEST and String(cell.get("state", GridTypes.STATE_HIDDEN)) != GridTypes.STATE_HIDDEN:
 				_ensure_chest_rolls(cell)
-
 			var view := CELL_SCENE.instantiate()
 			grid_container.add_child(view)
-
-			var is_void := false
-			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_BLOCKED and String(cell.get("state", GridTypes.STATE_HIDDEN)) == GridTypes.STATE_HIDDEN:
-				is_void = true
-
+			var is_void := String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_BLOCKED and String(cell.get("state", GridTypes.STATE_HIDDEN)) == GridTypes.STATE_HIDDEN
 			view.setup(cell, pos, pos == RunState.player_grid_pos and not is_void, is_void)
 			cells.append(view)
 
 func _refresh_victory() -> void:
 	var won := _is_run_won()
 	victory_panel.visible = won
-	if won:
-		message_label.text = "Boss 已清理，本局结束。"
-		var detail := victory_panel.get_node("VictoryBox/VictoryDetail") as Label
-		detail.text = "构筑：基础弹 Lv.%d / 光环 Lv.%d / 固定形状 Lv.%d / 射线 Lv.%d" % [RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam")]
+	if not won:
+		return
+	message_label.text = "Boss 已清理，本局结束。"
+	var build_parts: Array[String] = []
+	for weapon_id in WeaponDefinitions.get_ids():
+		build_parts.append("%s Lv.%d" % [WeaponDefinitions.get_display_name(weapon_id), RunState.get_weapon_level(weapon_id)])
+	var detail := victory_panel.get_node("VictoryBox/VictoryDetail") as Label
+	detail.text = "任务完成：%d/%d。构筑：%s" % [RunState.completed_tasks, RunState.total_tasks, " / ".join(build_parts)]
 
 func _refresh_minimap() -> void:
 	if minimap != null and minimap.has_method("refresh"):
 		minimap.refresh(RunState.grid_data, RunState.player_grid_pos)
-
-# ──────────────────────────────────────────
-#  Input & movement
-# ──────────────────────────────────────────
 
 func _input(event: InputEvent) -> void:
 	if input_locked:
@@ -272,47 +246,29 @@ func _try_enter_cell(pos: Vector2i) -> void:
 func _can_enter(pos: Vector2i) -> bool:
 	if not _is_inside(pos):
 		return false
-
 	var cell: Dictionary = RunState.grid_data[pos.y][pos.x]
-	var state := String(cell["state"])
-	if state == GridTypes.STATE_HIDDEN:
+	if String(cell.get("state", GridTypes.STATE_HIDDEN)) == GridTypes.STATE_HIDDEN:
 		return false
-
-	var cell_type := String(cell["type"])
-	if cell_type == GridTypes.CELL_BLOCKED:
+	if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_BLOCKED:
 		return false
-
-	var current_connections: Array = RunState.grid_data[RunState.player_grid_pos.y][RunState.player_grid_pos.x].get("connections", [])
+	var current_cell: Dictionary = RunState.grid_data[RunState.player_grid_pos.y][RunState.player_grid_pos.x]
+	var current_connections: Array = current_cell.get("connections", [])
 	if not current_connections.is_empty():
-		if not current_connections.has(pos):
-			return false
-	else:
-		var distance: int = abs(pos.x - RunState.player_grid_pos.x) + abs(pos.y - RunState.player_grid_pos.y)
-		if distance != 1:
-			return false
-
-	return true
+		return current_connections.has(pos)
+	return abs(pos.x - RunState.player_grid_pos.x) + abs(pos.y - RunState.player_grid_pos.y) == 1
 
 func _animate_move(target_pos: Vector2i) -> void:
 	input_locked = true
 	RunState.previous_grid_pos = RunState.player_grid_pos
-
 	if move_tween != null:
 		move_tween.kill()
 	move_tween = create_tween()
 	move_tween.set_parallel()
-
-	# Scheme A: map moves so target cell slides to centre; player highlight updates after.
 	RunState.player_grid_pos = target_pos
 	_reveal_connections(target_pos)
-
-	# Camera pan (map slides to centre the target)
 	_animate_camera_to(target_pos)
-
 	var cell: Dictionary = RunState.grid_data[target_pos.y][target_pos.x]
-	var cell_type := String(cell["type"])
-
-	# Refresh grid at end so highlight updates on the new cell
+	var cell_type := String(cell.get("type", GridTypes.CELL_EMPTY))
 	move_tween.chain().tween_callback(func():
 		_refresh_grid()
 		input_locked = false
@@ -331,50 +287,29 @@ func _animate_move(target_pos: Vector2i) -> void:
 	)
 
 func _reveal_connections(pos: Vector2i) -> void:
-	var grid := RunState.grid_data
-	var cell_conns: Array = grid[pos.y][pos.x].get("connections", [])
-	if not cell_conns.is_empty():
-		GridGenerator.reveal_neighbors_tree(grid, pos)
+	if not _is_inside(pos):
+		return
+	var connections: Array = RunState.grid_data[pos.y][pos.x].get("connections", [])
+	if not connections.is_empty():
+		GridGenerator.reveal_neighbors_tree(RunState.grid_data, pos)
 	else:
-		GridGenerator.reveal_neighbors(grid, pos)
-
-# ──────────────────────────────────────────
-#  Camera (dynamic centre from MapViewport)
-# ──────────────────────────────────────────
+		GridGenerator.reveal_neighbors(RunState.grid_data, pos)
 
 func _animate_camera_to(grid_pos: Vector2i) -> void:
-	var cell_world_pos := _cell_world_position(grid_pos)
-	var viewport_center := _viewport_center_for_map()
-	var target_offset := viewport_center - cell_world_pos
+	var target_offset := _viewport_center_for_map() - _cell_world_position(grid_pos)
 	move_tween.tween_property(map_container, "position", target_offset, Constants.GRID_CAMERA_TWEEN_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 func _center_camera_instant() -> void:
 	if map_container == null:
 		return
-	var cell_world_pos := _cell_world_position(RunState.player_grid_pos)
-	var viewport_center := _viewport_center_for_map()
-	map_container.position = viewport_center - cell_world_pos
+	map_container.position = _viewport_center_for_map() - _cell_world_position(RunState.player_grid_pos)
 
 func _cell_world_position(grid_pos: Vector2i) -> Vector2:
-	return Vector2(
-		grid_pos.x * (Constants.GRID_CELL_SIZE + Constants.GRID_CELL_MARGIN) + (Constants.GRID_CELL_SIZE + Constants.GRID_CELL_MARGIN) * 0.5,
-		grid_pos.y * (Constants.GRID_CELL_SIZE + Constants.GRID_CELL_MARGIN) + (Constants.GRID_CELL_SIZE + Constants.GRID_CELL_MARGIN) * 0.5
-	)
+	var stride := Constants.GRID_CELL_SIZE + Constants.GRID_CELL_MARGIN
+	return Vector2(grid_pos.x * stride + stride * 0.5, grid_pos.y * stride + stride * 0.5)
 
 func _viewport_center_for_map() -> Vector2:
-	if map_viewport != null:
-		return map_viewport.size * 0.5
-	return Vector2(260, 250)
-
-func _find_cell_view(pos: Vector2i) -> Control:
-	for cell_view in cells:
-		if cell_view.cell_pos == pos:
-			return cell_view
-	return null
-
-# ──────────────────────────────────────────
-#  Battle entry
-# ──────────────────────────────────────────
+	return map_viewport.size * 0.5 if map_viewport != null else Vector2(260, 250)
 
 func _enter_battle_room(pos: Vector2i, cell_type: String) -> void:
 	RunState.current_task_pos = pos
@@ -394,10 +329,6 @@ func _enter_battle_room(pos: Vector2i, cell_type: String) -> void:
 func _emit_enter_battle_requested() -> void:
 	enter_battle_requested.emit()
 
-# ──────────────────────────────────────────
-#  Chest
-# ──────────────────────────────────────────
-
 func _open_chest(cell: Dictionary) -> void:
 	if bool(cell.get("opened", false)):
 		message_label.text = "宝箱已经打开。"
@@ -408,7 +339,7 @@ func _open_chest(cell: Dictionary) -> void:
 		message_label.text = "金币不足：打开宝箱需要 %d 金币。" % cost
 		_refresh_all()
 		return
-	if _build_reward_pool().is_empty():
+	if RunState.build_reward_pool().is_empty():
 		cell["opened"] = true
 		message_label.text = "没有可用奖励。"
 		_refresh_all()
@@ -419,34 +350,25 @@ func _open_chest(cell: Dictionary) -> void:
 func _show_reward_overlay(choices: Array[Dictionary]) -> void:
 	get_tree().paused = true
 	var cost := int(pending_chest_cell.get("cost", Constants.NORMAL_CHEST_COST))
-	reward_overlay.show_choices("阵列宝箱", "宝箱开启消耗 %d 金币" % cost, choices)
+	reward_overlay.show_choices("阵列宝箱", "选择后消耗 %d 金币" % cost, choices)
 
 func _choose_chest_reward(choice: Dictionary) -> void:
 	var cost := int(pending_chest_cell.get("cost", Constants.NORMAL_CHEST_COST))
-	if RunState.gold < cost:
-		reward_overlay.hide_overlay()
-		get_tree().paused = false
-		message_label.text = "金币不足：打开宝箱需要 %d 金币。" % cost
-		_refresh_all()
-		return
-	RunState.gold -= cost
-	match String(choice.get("kind", "")):
-		"weapon":
-			var weapon_id := String(choice.get("weapon_id", "projectile"))
-			RunState.weapons[weapon_id] = clampi(int(choice.get("level", 1)), 1, 3)
-			message_label.text = "打开宝箱：%s 提升到 Lv.%d" % [_weapon_display_name(weapon_id), RunState.get_weapon_level(weapon_id)]
-		"passive":
-			var passive_id := String(choice.get("passive_id", "move_speed"))
-			RunState.set_passive_level(passive_id, int(choice.get("level", 1)))
-			message_label.text = "打开宝箱：%s 提升到 Lv.%d" % [_passive_display_name(passive_id), RunState.get_passive_level(passive_id)]
-	pending_chest_cell["opened"] = true
+	var result := RunState.purchase_reward(cost, choice)
 	reward_overlay.hide_overlay()
 	get_tree().paused = false
+	if not bool(result.get("success", false)):
+		message_label.text = String(result.get("message", "奖励应用失败。"))
+		pending_chest_cell = {}
+		_refresh_all()
+		return
+	pending_chest_cell["opened"] = true
+	message_label.text = "打开宝箱：%s" % String(result.get("message", "获得奖励。"))
 	pending_chest_cell = {}
 	_refresh_all()
 
 func _roll_reward_choices() -> Array[Dictionary]:
-	var choices := _build_reward_pool()
+	var choices := RunState.build_reward_pool()
 	var choice_count := int(pending_chest_cell.get("upgrade_choice_count", 3))
 	var drawn := RandomPool.draw(RunState.rng_stream(RunRngManagerScript.STREAM_CHEST_REWARD), choices, {
 		"count": mini(choice_count, choices.size()),
@@ -457,173 +379,14 @@ func _roll_reward_choices() -> Array[Dictionary]:
 		result.append(choice as Dictionary)
 	return result
 
-func _build_reward_pool() -> Array[Dictionary]:
-	var pool: Array[Dictionary] = []
-	for weapon_id in WEAPON_IDS:
-		var weapon_level := RunState.get_weapon_level(weapon_id)
-		if weapon_level > 0 and weapon_level < 3:
-			pool.append(_weapon_reward(weapon_id, weapon_level + 1, "升级武器"))
-		elif weapon_level <= 0 and RunState.get_weapon_count() < RunState.weapon_slots:
-			pool.append(_weapon_reward(weapon_id, 1, "新武器"))
-	for passive_id in RunState.PASSIVE_IDS:
-		var passive_level := RunState.get_passive_level(passive_id)
-		if passive_level > 0 and passive_level < 3:
-			pool.append(_passive_reward(passive_id, passive_level + 1, "升级被动"))
-		elif passive_level <= 0 and RunState.get_passive_count() < RunState.passive_slots:
-			pool.append(_passive_reward(passive_id, 1, "新被动"))
-	return pool
-
-func _weapon_reward(weapon_id: String, level: int, prefix: String) -> Dictionary:
-	return {
-		"id": "weapon:%s:%d" % [weapon_id, level],
-		"kind": "weapon",
-		"weapon_id": weapon_id,
-		"level": level,
-		"weight": 1.0,
-		"tags": ["weapon", weapon_id],
-		"label": "%s\n%s Lv.%d\n%s" % [prefix, _weapon_display_name(weapon_id), level, _weapon_stats_text(weapon_id, level)],
-	}
-
-func _passive_reward(passive_id: String, level: int, prefix: String) -> Dictionary:
-	return {
-		"id": "passive:%s:%d" % [passive_id, level],
-		"kind": "passive",
-		"passive_id": passive_id,
-		"level": level,
-		"weight": 1.0,
-		"tags": ["passive", passive_id],
-		"label": "%s\n%s Lv.%d\n%s" % [prefix, _passive_display_name(passive_id), level, _passive_stats_text(passive_id, level)],
-	}
-
-func _roll_upgrade_choices(count: int) -> Array[String]:
-	var shuffled: Array[String] = []
-	for weapon_id in WEAPON_IDS:
-		shuffled.append(weapon_id)
-	RunState.rng_stream(RunRngManagerScript.STREAM_WEAPON_REWARD).shuffle_array(shuffled)
-	var choices: Array[String] = []
-	for i in range(mini(count, shuffled.size())):
-		choices.append(shuffled[i])
-	var has_upgradable := false
-	for weapon_id in choices:
-		if RunState.get_weapon_level(weapon_id) < 3:
-			has_upgradable = true
-			break
-	if not has_upgradable:
-		var upgradable := _get_upgradable_weapons()
-		if not upgradable.is_empty():
-			choices[choices.size() - 1] = upgradable[0]
-	return choices
-
-func _get_chest_upgrade_choices(cell: Dictionary) -> Array[String]:
-	var choices: Array[String] = []
-	var stored_choices: Array = cell.get("upgrade_choices", [])
-	for weapon_id in stored_choices:
-		choices.append(String(weapon_id))
-	if choices.is_empty():
-		choices = _roll_upgrade_choices(3)
-
-	var has_upgradable := false
-	for weapon_id in choices:
-		if RunState.get_weapon_level(weapon_id) < 3:
-			has_upgradable = true
-			break
-	if not has_upgradable:
-		var upgradable := _get_upgradable_weapons()
-		if not upgradable.is_empty():
-			choices[choices.size() - 1] = upgradable[0]
-	return choices
-
-func _get_upgradable_weapons() -> Array[String]:
-	var result: Array[String] = []
-	for weapon_id in WEAPON_IDS:
-		if RunState.get_weapon_level(weapon_id) < 3:
-			result.append(weapon_id)
-	return result
-
-func _upgrade_card_text(weapon_id: String) -> String:
-	var level := RunState.get_weapon_level(weapon_id)
-	if level <= 0:
-		return "%s\n未获得\nLv.1\n%s" % [_weapon_display_name(weapon_id), _weapon_stats_text(weapon_id, 1)]
-	if level >= 3:
-		return "%s\n当前 Lv.3\n%s\n已满级" % [_weapon_display_name(weapon_id), _weapon_stats_text(weapon_id, 3)]
-	var next_level := level + 1
-	return "%s\n当前 Lv.%d\n%s\n\n升级后 Lv.%d\n%s" % [_weapon_display_name(weapon_id), level, _weapon_stats_text(weapon_id, level), next_level, _weapon_stats_text(weapon_id, next_level)]
-
-func _weapon_stats_text(weapon_id: String, level: int) -> String:
-	var safe_level := clampi(level, 1, 3)
-	match weapon_id:
-		"projectile":
-			return "弹数 %d / 伤害 %.1f / 冷却 %.2fs" % [Constants.PROJECTILE_COUNT_LV[safe_level], Constants.PROJECTILE_DAMAGE_LV[safe_level], Constants.PROJECTILE_COOLDOWN_LV[safe_level]]
-		"aura":
-			return "半径 %.0f / 伤害 %.1f / 间隔 %.2fs" % [Constants.AURA_RADIUS_LV[safe_level], Constants.AURA_DAMAGE_LV[safe_level], Constants.AURA_TICK_LV[safe_level]]
-		"shape":
-			return "伤害 %.1f / 冷却 %.2fs / 持续 %.1fs" % [Constants.SHAPE_DAMAGE_LV[safe_level], Constants.SHAPE_COOLDOWN_LV[safe_level], Constants.SHAPE_DURATION]
-		"beam":
-			return "范围 %.0f / 伤害 %.1f / 间隔 %.2fs" % [Constants.BEAM_RANGE, Constants.BEAM_DAMAGE_LV[safe_level], Constants.BEAM_TICK_LV[safe_level]]
-	return ""
-
-func _weapon_display_name(weapon_name: String) -> String:
-	match weapon_name:
-		"aura":
-			return "光环"
-		"projectile":
-			return "基础弹"
-		"shape":
-			return "固定形状"
-		"beam":
-			return "射线"
-	return weapon_name
-
-func _passive_display_name(passive_id: String) -> String:
-	match passive_id:
-		"move_speed":
-			return "移动速度"
-		"damage_bonus":
-			return "全武器伤害"
-		"cooldown_bonus":
-			return "冷却缩短"
-		"pickup_bonus":
-			return "金币吸附"
-		"sync_bonus":
-			return "同步强化"
-		"gold_bonus":
-			return "金币收益"
-	return passive_id
-
-func _passive_stats_text(passive_id: String, level: int) -> String:
-	match passive_id:
-		"move_speed":
-			return "移动速度 +%d%%" % int(level * 8)
-		"damage_bonus":
-			return "全武器伤害 +%d%%" % int(level * 12)
-		"cooldown_bonus":
-			return "武器冷却 -%d%%" % int(level * 8)
-		"pickup_bonus":
-			return "金币吸附范围 +%d%%" % int(level * 25)
-		"sync_bonus":
-			return "同步上限 +%d，恢复 +%d%%" % [level * 10, level * 20]
-		"gold_bonus":
-			return "金币收益 +%d%%" % int(level * 15)
-	return ""
-
-# ──────────────────────────────────────────
-#  Helpers
-# ──────────────────────────────────────────
-
 func _is_battle_room(cell_type: String) -> bool:
 	return GridTypes.BATTLE_ROOMS.has(cell_type)
 
 func _is_inside(pos: Vector2i) -> bool:
-	var grid_height: int = RunState.grid_data.size() as int
-	if grid_height == 0:
-		return false
-	var grid_width: int = int(RunState.grid_data[0].size())
-	return pos.x >= 0 and pos.y >= 0 and pos.x < grid_width and pos.y < grid_height
+	return pos.y >= 0 and pos.y < RunState.grid_data.size() and pos.x >= 0 and pos.x < RunState.grid_data[pos.y].size()
 
 func _grid_cols() -> int:
-	if RunState.grid_data.is_empty():
-		return RunState.grid_size
-	return int(RunState.grid_data[0].size())
+	return RunState.grid_size if RunState.grid_data.is_empty() else int(RunState.grid_data[0].size())
 
 func _find_start_pos() -> Vector2i:
 	for y in range(RunState.grid_data.size()):
@@ -643,31 +406,19 @@ func _count_cells(cell_type: String) -> int:
 func _prepare_chests() -> void:
 	for row in RunState.grid_data:
 		for cell in row:
-			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_CHEST:
-				if not cell.has("opened"):
-					cell["opened"] = false
+			if String(cell.get("type", GridTypes.CELL_EMPTY)) == GridTypes.CELL_CHEST and not cell.has("opened"):
+				cell["opened"] = false
 
 func _ensure_chest_rolls(cell: Dictionary) -> void:
 	if cell.has("cost"):
 		return
 	cell["cost"] = _roll_chest_cost()
-	var choice_count := 4 if int(cell["cost"]) >= Constants.ADVANCED_CHEST_COST else 3
-	cell["upgrade_choice_count"] = choice_count
+	cell["upgrade_choice_count"] = 4 if int(cell["cost"]) >= Constants.ADVANCED_CHEST_COST else 3
 
 func _roll_chest_cost() -> int:
 	var chest_type_stream := RunState.rng_stream(RunRngManagerScript.STREAM_CHEST_TYPE)
 	var base_cost := Constants.ADVANCED_CHEST_COST if chest_type_stream.chance(0.35) else Constants.NORMAL_CHEST_COST
 	return base_cost + RunState.get_player_difficulty_level() * Constants.GRID_CHEST_COST_PER_DIFFICULTY
-
-func _roll_chest_upgrade_template(pos: Vector2i, count: int) -> Array[String]:
-	var shuffled: Array[String] = []
-	for weapon_id in WEAPON_IDS:
-		shuffled.append(weapon_id)
-	RunState.rng_stream(RunRngManagerScript.STREAM_WEAPON_REWARD).shuffle_array(shuffled)
-	var result: Array[String] = []
-	for i in range(mini(count, shuffled.size())):
-		result.append(shuffled[i])
-	return result
 
 func _count_cleared_cells(cell_type: String) -> int:
 	var count := 0

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="WeaponDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/WeaponDefinition.gd" id="1_definition"]
+[ext_resource type="Script" path="res://scenes/weapons/ShapeWeapon.gd" id="2_runtime"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = &"shape"
+display_name = "固定形状"
+max_level = 3
+sort_order = 20
+tags = PackedStringArray("weapon", "shape")
+runtime_script = ExtResource("2_runtime")
+level_descriptions = PackedStringArray("", "伤害 8.0 / 冷却 2.00s / 持续 0.4s", "伤害 10.0 / 冷却 1.50s / 持续 0.4s", "伤害 12.0 / 冷却 1.00s / 持续 0.4s")

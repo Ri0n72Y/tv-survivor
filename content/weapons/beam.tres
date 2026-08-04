@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="WeaponDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/WeaponDefinition.gd" id="1_definition"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/BeamWeapon.tscn" id="2_runtime"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = &"beam"
+display_name = "射线"
+max_level = 3
+sort_order = 30
+tags = PackedStringArray("weapon", "beam")
+runtime_scene = ExtResource("2_runtime")
+level_descriptions = PackedStringArray("", "范围 300 / 伤害 2.5 / 间隔 0.25s", "范围 300 / 伤害 3.0 / 间隔 0.225s", "范围 300 / 伤害 3.5 / 间隔 0.20s")

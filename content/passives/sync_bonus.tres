@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="PassiveDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/PassiveDefinition.gd" id="1_definition"]
+
+[resource]
+script = ExtResource("1_definition")
+content_id = &"sync_bonus"
+display_name = "同步强化"
+max_level = 3
+sort_order = 40
+tags = PackedStringArray("passive", "attribute")
+attribute_ids = PackedStringArray("sync_max", "sync_regen_multiplier")
+add_per_level = PackedFloat32Array(10.0, 0.2)
+level_descriptions = PackedStringArray("", "同步上限 +10，恢复 +20%", "同步上限 +20，恢复 +40%", "同步上限 +30，恢复 +60%")

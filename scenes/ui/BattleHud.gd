@@ -43,7 +43,7 @@ func update_hud(
 	sync_rate: float,
 	signal_text: String,
 	phase_text: String,
-	_weapons: Dictionary,
+	build_snapshot: Dictionary,
 	elite_ratio: float,
 	gold: int,
 	uses_sync: bool = true,
@@ -52,19 +52,20 @@ func update_hud(
 	status_text: String = "",
 	active_buffs: Array[Dictionary] = []
 ) -> void:
+	var sync_max := _sync_max_from_snapshot(build_snapshot)
 	score_label.text = "金币：%d" % gold
 	objective_label.text = objective_text
 	status_label.text = status_text
 	sync_label.visible = uses_sync
 	sync_bar.visible = uses_sync
 	signal_label.visible = uses_sync
-	sync_bar.max_value = RunState.get_sync_max()
+	sync_bar.max_value = sync_max
 	sync_bar.value = sync_rate
-	sync_label.text = "同步率：%.0f / %.0f" % [sync_rate, RunState.get_sync_max()]
-	_update_danger_target(signal_text, uses_sync)
+	sync_label.text = "同步率：%.0f / %.0f" % [sync_rate, sync_max]
+	_update_danger_target(sync_rate, sync_max, signal_text, uses_sync)
 	signal_label.text = signal_text
 	var buff_summary := _buff_summary(active_buffs)
-	if buff_summary != "":
+	if not buff_summary.is_empty():
 		signal_label.text = "%s  %s" % [signal_text, buff_summary]
 	if signal_text.contains("下降") or signal_text.contains("弱"):
 		signal_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.2))
@@ -74,7 +75,7 @@ func update_hud(
 		signal_label.add_theme_color_override("font_color", Color.WHITE)
 	time_label.text = phase_text
 	guide_label.text = _guide_text(uses_sync, room_type)
-	weapon_label.text = "武器：%d/%d  基础弹 Lv.%d  光环 Lv.%d  固定形状 Lv.%d  射线 Lv.%d\n被动：%d/%d  移速 Lv.%d  伤害 Lv.%d  冷却 Lv.%d  吸附 Lv.%d  同步 Lv.%d  金币 Lv.%d" % [RunState.get_weapon_count(), RunState.weapon_slots, RunState.get_weapon_level("projectile"), RunState.get_weapon_level("aura"), RunState.get_weapon_level("shape"), RunState.get_weapon_level("beam"), RunState.get_passive_count(), RunState.passive_slots, RunState.get_passive_level("move_speed"), RunState.get_passive_level("damage_bonus"), RunState.get_passive_level("cooldown_bonus"), RunState.get_passive_level("pickup_bonus"), RunState.get_passive_level("sync_bonus"), RunState.get_passive_level("gold_bonus")]
+	weapon_label.text = _build_label(build_snapshot)
 	var has_elite := elite_ratio >= 0.0
 	elite_label.visible = has_elite
 	elite_bar.visible = has_elite
@@ -85,18 +86,72 @@ func play_damage_feedback(_amount: float = 0.0) -> void:
 	damage_pulse_left = damage_pulse_duration
 	_update_damage_feedback()
 
-func _update_danger_target(signal_text: String, uses_sync: bool) -> void:
+func _build_label(snapshot: Dictionary) -> String:
+	var weapons: Dictionary = snapshot.get("weapons", {})
+	var passives: Dictionary = snapshot.get("passives", {})
+	var weapon_parts: Array[String] = []
+	for weapon_id in WeaponDefinitions.get_ids():
+		weapon_parts.append("%s Lv.%d" % [
+			WeaponDefinitions.get_display_name(weapon_id),
+			_snapshot_level(weapons, weapon_id, WeaponDefinitions.get_max_level(weapon_id)),
+		])
+	var passive_parts: Array[String] = []
+	for passive_id in PassiveDefinitions.get_ids():
+		passive_parts.append("%s Lv.%d" % [
+			PassiveDefinitions.get_display_name(passive_id),
+			_snapshot_level(passives, passive_id, PassiveDefinitions.get_max_level(passive_id)),
+		])
+	return "武器：%d/%d  %s\n被动：%d/%d  %s" % [
+		_count_owned(weapons, WeaponDefinitions.get_ids(), true),
+		maxi(0, int(snapshot.get("weapon_slots", 0))),
+		" / ".join(weapon_parts),
+		_count_owned(passives, PassiveDefinitions.get_ids(), false),
+		maxi(0, int(snapshot.get("passive_slots", 0))),
+		" / ".join(passive_parts),
+	]
+
+func _sync_max_from_snapshot(snapshot: Dictionary) -> float:
+	var passives: Dictionary = snapshot.get("passives", {})
+	return BuildAttributes.evaluate(passives, BuildAttributes.SYNC_MAX)
+
+static func _count_owned(values: Dictionary, ids: Array[String], weapon_values: bool) -> int:
+	var count := 0
+	for content_id in ids:
+		var max_level := WeaponDefinitions.get_max_level(content_id) if weapon_values else PassiveDefinitions.get_max_level(content_id)
+		if _snapshot_level(values, content_id, max_level) > 0:
+			count += 1
+	return count
+
+static func _snapshot_level(values: Dictionary, content_id: String, max_level: int) -> int:
+	var value: Variant = values.get(content_id, 0)
+	var parsed := 0
+	match typeof(value):
+		TYPE_INT:
+			parsed = int(value)
+		TYPE_FLOAT:
+			var number := float(value)
+			parsed = 0 if is_nan(number) or is_inf(number) else int(number)
+		TYPE_STRING, TYPE_STRING_NAME:
+			var text := String(value).strip_edges()
+			parsed = int(text) if text.is_valid_int() else 0
+	return clampi(parsed, 0, max_level)
+
+func _update_danger_target(sync_rate: float, sync_max: float, signal_text: String, uses_sync: bool) -> void:
 	if not uses_sync:
 		danger_target = 0.0
 		return
+	var sync_danger := 0.0
+	if sync_max > 0.0:
+		var hp_ratio := clampf(sync_rate / sync_max, 0.0, 1.0)
+		sync_danger = clampf((0.55 - hp_ratio) / 0.45, 0.0, 1.0)
+	var signal_danger := 0.0
 	if signal_text == BattleTypes.SIGNAL_DECLINING:
-		danger_target = 0.48
+		signal_danger = 0.48
 	elif signal_text == BattleTypes.SIGNAL_WEAK:
-		danger_target = 0.68
+		signal_danger = 0.68
 	elif signal_text == BattleTypes.SIGNAL_DISCONNECTED:
-		danger_target = 0.82
-	else:
-		danger_target = 0.0
+		signal_danger = 0.82
+	danger_target = maxf(sync_danger, signal_danger)
 
 func _update_damage_feedback() -> void:
 	var pulse_ratio := 0.0
@@ -133,13 +188,10 @@ func _buff_summary(active_buffs: Array[Dictionary]) -> String:
 		if str(buff.get("id", "")) == "sync_stable":
 			continue
 		var buff_name := str(buff.get("name", ""))
-		if buff_name == "":
+		if buff_name.is_empty():
 			continue
 		var stacks := int(buff.get("stacks", 0))
 		if stacks <= 0:
 			continue
-		if stacks > 1:
-			parts.append("%s x%d" % [buff_name, stacks])
-		else:
-			parts.append(buff_name)
+		parts.append("%s x%d" % [buff_name, stacks] if stacks > 1 else buff_name)
 	return "  ".join(parts)
