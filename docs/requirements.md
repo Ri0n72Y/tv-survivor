@@ -17,7 +17,7 @@ Unless a later Requirement explicitly changes them, refactoring must preserve th
 - abstract/tree-like node exploration with hidden/revealed/cleared state and constrained connections;
 - movement between valid connected nodes, camera follow/centering, and minimap feedback;
 - resource/reward nodes and battle rooms;
-- task, search, elite, and Boss battle flows;
+- search, elite, and Boss battle flows;
 - real-time automatic-weapon combat;
 - synchronization/sync state as a meaningful battle resource;
 - weapon and passive build progression with slot and level limits;
