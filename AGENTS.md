@@ -1,26 +1,65 @@
 # Development workflow
 
-This repository uses SDD for material changes and Ponytail `full` as the default implementation principle.
+This repository uses a game-design-first SDD workflow for material changes and Ponytail `full` as the default implementation principle.
 
 ## Authority
 
-1. `docs/requirements.md` — Requirement: intended behavior, constraints, acceptance direction.
-2. `docs/design/` — Design: gameplay/world design and technical structure that has actually been decided.
-3. `docs/specs/<capability>.md` — Spec: agent-executable projection for a capability being refactored or newly developed.
-4. Task — executable work derived from Requirement + Design + Spec; keep it in the active issue/PR unless a durable task document is specifically useful.
-5. Implementation — evidence of current behavior, not authority over Requirement or Design.
+The project authority chain is:
 
-## SDD rules
+1. `docs/design/` — **Game Design**: what the game is trying to be, how it should feel, which gameplay ideas and content directions are being explored or selected.
+2. `docs/requirements.md` — **Requirement**: the current version Scope extracted from Game Design; which designed capabilities are actually committed for implementation now, including acceptance direction and explicit out-of-scope items when relevant.
+3. `docs/system-design/<capability>.md` — **System Design**: the software/technical structure chosen to implement an in-scope Requirement, including ownership, data flow, lifecycle, interfaces, dependency direction, and material technical decisions.
+4. `docs/specs/<capability>.md` — **Spec**: the agent-executable projection of the current Requirement and System Design for a capability being refactored or newly developed.
+5. Task — executable development work derived from Requirement + System Design + Spec; keep it in the active issue/PR unless a durable task document is specifically useful.
+6. Implementation — evidence of current behavior and constraints, not authority to redefine upstream Game Design, Requirement, or System Design.
 
-- Read Requirement and relevant Design before changing code.
-- Read the affected code path end to end before deciding the implementation.
+This order is an authority and projection relationship, not a requirement that every small discussion create every document.
+
+## Game Design rules
+
+- Game Design precedes version scoping. It may contain future ideas, alternatives, content space, and concepts that are not yet committed to implementation.
+- Do not force open-ended design exploration into Requirement, Spec, or Task merely because it has been discussed.
+- Game Design should describe gameplay intent and content structure without being constrained by the current implementation unless a technical limitation is itself an intentional design constraint.
+- If a version decision intentionally changes the game direction, update Game Design first rather than hiding the change in Requirement or code.
+
+## Requirement rules
+
+- Requirement is a **version Scope**, not the complete game design and not a snapshot of everything the current code happens to support.
+- Extract Requirement only from sufficiently settled Game Design.
+- Requirement states what the current version must implement or preserve, the observable completion direction, and relevant exclusions.
+- A Requirement may select only part of the available Game Design. Unselected future Design remains valid Design but is not implementation scope.
+- Do not place module ownership, interfaces, scene structure, data models, factories, service boundaries, or other software architecture decisions in Requirement.
+
+## System Design rules
+
+- Create or update System Design only for capabilities that are entering implementation/refactoring and need material technical structure to be settled.
+- Read the affected code path end to end before deciding placement or boundaries.
+- Prefer existing Godot/project mechanisms and the smallest architecture that satisfies the current Requirement.
+- System Design owns material technical decisions: capability ownership, dependency direction, state/data model, lifecycle, interfaces/protocols, persistence/runtime choices, and integration boundaries.
+- If several technically plausible choices materially change architecture, surface the trade-off instead of silently choosing inside Spec or implementation.
+- Do not create generalized architecture merely because future Game Design might use it. Future replaceability is a design direction; current abstractions require a current consumer.
+
+## Spec rules
+
 - Do **not** backfill Specs for untouched legacy code.
-- Create or update a Spec when a capability is actually being refactored or newly developed.
-- If implementation exposes a missing material architecture decision, update Design first; do not hide the decision in Spec, Task, or code.
-- Preserve unaffected Requirement, Design, Specs, and behavior.
-- Remove stale contradictions instead of accumulating patch-note documentation.
+- Create or update a Spec only when a capability is actually being refactored or newly developed.
+- Project the current Requirement + System Design into the smallest locally executable contract.
+- A Spec should cover only what the implementation agent needs: observable behavior, capability boundary, ownership, contracts/invariants, allowed/prohibited change surface, failure behavior, and proportionate verification.
+- Spec must not invent gameplay, Scope, or material architecture. If projection requires one, return to Game Design, Requirement, or System Design at the earliest missing layer.
 
-A Spec should contain only what the implementation agent needs: behavior, boundary, ownership, contracts/invariants, allowed change surface, failure behavior, and proportionate verification.
+## Task and implementation rules
+
+- Build Tasks from Requirement + System Design + Spec together.
+- Tasks may contain concrete files, implementation order, migration steps, and test commands, but must not create hidden feature requirements or architecture decisions.
+- If implementation reveals that the change surface is larger than expected, update the earliest affected authoritative layer and revalidate only the descendants that actually depend on it.
+- Preserve unaffected Game Design, Requirement, System Design, Specs, Tasks, and behavior.
+- Remove stale contradictions instead of accumulating patch-note documentation in current-state artifacts.
+
+## Verification
+
+Verification follows the actual impact surface. Protect user-observable behavior, non-trivial state transitions, important data/contracts, and reproduced regressions. Do not add tests only to increase counts, symmetry, coverage percentage, or platform matrix size.
+
+Non-trivial logic should leave the smallest useful runnable check that protects an independently meaningful failure mode.
 
 ## Ponytail `full`
 
@@ -36,10 +75,8 @@ No one-implementation interfaces, factories for one product, scaffolding for hyp
 
 Bug fixes must address the shared root cause after checking callers, not only the reported symptom.
 
-Non-trivial logic must leave one smallest useful runnable check. Do not multiply tests for coverage symmetry or metrics.
-
 Never simplify away trust-boundary validation, data-loss prevention, required error handling, security, or explicitly requested behavior.
 
 ## Legacy documentation
 
-`docs/development-brief/` is a historical snapshot of the pre-SDD architecture discussion. It may help explain current code, but it is not current Requirement/Design/Spec authority. Do not update it as part of ordinary development.
+`docs/development-brief/` is a historical snapshot of the pre-SDD architecture discussion. It may help explain current code, but it is not current Game Design / Requirement / System Design / Spec authority. Do not update it as part of ordinary development.
