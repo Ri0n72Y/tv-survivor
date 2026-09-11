@@ -58,6 +58,19 @@ Do not build generalized plugin systems, event frameworks, factories, interfaces
 
 Future replaceability is a design direction. A current abstraction requires a current implementation consumer and a concrete boundary worth preserving.
 
+## Existing technical documents
+
+The repository already contains pre-workflow technical notes such as `docs/content-and-effect-architecture.md`, `docs/buff_system.md`, and `docs/rng.md`.
+
+Do not mass-migrate or rewrite them merely to fit the new directory structure. Treat them as historical or capability-specific context until the corresponding capability is actually changed.
+
+When a capability enters the current Requirement:
+
+1. inspect the relevant legacy document and implementation;
+2. decide which technical decisions are still valid;
+3. place only the current authoritative decisions needed for the change into `docs/system-design/<capability>.md` when a durable System Design is warranted;
+4. do not preserve obsolete architecture merely for documentation continuity.
+
 ## Relationship to Spec
 
 Spec projects the settled Requirement + System Design into a locally executable implementation contract.
