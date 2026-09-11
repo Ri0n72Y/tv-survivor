@@ -7,7 +7,7 @@ This repository uses a game-design-first SDD workflow for material changes and P
 The project authority chain is:
 
 1. `docs/design/` — **Game Design**: what the game is trying to be, how it should feel, which gameplay ideas and content directions are being explored or selected.
-2. `docs/requirements.md` — **Requirement**: the current version Scope extracted from Game Design; which designed capabilities are actually committed for implementation now, including acceptance direction and explicit out-of-scope items when relevant.
+2. `docs/requirements.md` — **Requirement**: the current version Scope extracted from Game Design; which designed capabilities are actually committed for implementation or validation now, including acceptance direction and explicit out-of-scope items when relevant.
 3. `docs/system-design/<capability>.md` — **System Design**: the software/technical structure chosen to implement an in-scope Requirement, including ownership, data flow, lifecycle, interfaces, dependency direction, and material technical decisions.
 4. `docs/specs/<capability>.md` — **Spec**: the agent-executable projection of the current Requirement and System Design for a capability being refactored or newly developed.
 5. Task — executable development work derived from Requirement + System Design + Spec; keep it in the active issue/PR unless a durable task document is specifically useful.
@@ -25,10 +25,35 @@ This order is an authority and projection relationship, not a requirement that e
 ## Requirement rules
 
 - Requirement is a **version Scope**, not the complete game design and not a snapshot of everything the current code happens to support.
-- Extract Requirement only from sufficiently settled Game Design.
-- Requirement states what the current version must implement or preserve, the observable completion direction, and relevant exclusions.
+- Extract Requirement only from sufficiently settled Game Design, or from a clearly stated design question that needs a prototype to settle it.
+- Requirement states what the current version must implement, preserve, or validate; the observable completion direction; and relevant exclusions.
 - A Requirement may select only part of the available Game Design. Unselected future Design remains valid Design but is not implementation scope.
 - Do not place module ownership, interfaces, scene structure, data models, factories, service boundaries, or other software architecture decisions in Requirement.
+
+### Delivery Scope vs Validation Scope
+
+A Requirement may be one of two modes:
+
+- **Delivery Scope** — implement a sufficiently settled design as a capability intended to remain in the project.
+- **Validation Scope** — build the smallest useful prototype needed to answer a concrete game-design question or test a hypothesis.
+
+A Validation Scope must state:
+
+- the design question or hypothesis;
+- the minimum playable/observable experiment;
+- what evidence or result would answer the question;
+- which parts are intentionally disposable, provisional, or not yet production commitments.
+
+Prototype code is evidence for Game Design. It does not become permanent architecture or Requirement merely because it exists.
+
+For isolated disposable experiments, System Design and Spec may be minimal. If the experiment modifies shared production paths, persistent data, common runtime contracts, or other meaningful project boundaries, use the normal System Design → Spec protection even if the gameplay itself is experimental.
+
+After a Validation Scope is evaluated, either:
+
+1. update Game Design with the learned conclusion and discard/retire the experiment; or
+2. update Game Design, then extract a Delivery Scope for the version that will keep and harden the capability.
+
+Do not silently graduate prototype shortcuts into permanent architecture.
 
 ## System Design rules
 
@@ -58,6 +83,10 @@ This order is an authority and projection relationship, not a requirement that e
 ## Verification
 
 Verification follows the actual impact surface. Protect user-observable behavior, non-trivial state transitions, important data/contracts, and reproduced regressions. Do not add tests only to increase counts, symmetry, coverage percentage, or platform matrix size.
+
+For Delivery Scope, verification establishes that the committed behavior and contracts hold.
+
+For Validation Scope, verification should first establish that the prototype reliably exposes the intended design question; design evaluation evidence may be qualitative or playtest-based and should not be confused with software correctness tests.
 
 Non-trivial logic should leave the smallest useful runnable check that protects an independently meaningful failure mode.
 
