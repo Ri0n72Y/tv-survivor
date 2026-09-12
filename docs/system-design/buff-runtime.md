@@ -63,10 +63,93 @@ That usage is implementation evidence for the buff boundary only. The Requiremen
 - `BuffSystem` owns timing/expiration traversal for registered containers.
 - Concrete gameplay mutation remains with gameplay consumers of emitted events.
 - The current three tick phases describe the implemented protocol; they are not a general-purpose event-phase framework for every future effect.
-- No ECS, universal effect graph, recursive event queue, or generic command bus is implied by this design.
+- No ECS, universal effect graph, recursive event queue, or generic command bus is implied by the current normative design.
+
+## Discussion
+
+> Non-authoritative. These points preserve future technical reasoning and must not be projected directly into Spec/Task.
+
+### Display boundary
+
+`BuffContainer.get_display_buffs()` already exposes presentation-oriented snapshots of active buffs. If a future buff/status UI is added, reading that snapshot is a plausible default direction because it avoids making UI the owner of runtime status.
+
+The exact UI contract is not decided here; it should be revisited when a status display enters Requirement Scope.
+
+### Generalized runtime-effect model
+
+If future in-scope content grows beyond the current lightweight buff runtime into richer timed, stacked, triggered, or cross-system effects, one candidate model is:
+
+- **EffectDefinition** — shared immutable static definition for identity, presentation, duration/stack policy, tags, modifiers, trigger subscriptions, and reusable actions;
+- **EffectInstance** — mutable runtime value carrying definition identity, source/owner identity, stack count, remaining duration/turns, application sequence, and only the runtime state that cannot remain static;
+- **EffectHost** — runtime owner/container for active effect instances, exposing add/find/stack/remove/snapshot/listener operations;
+- **EffectSystem** — lifecycle and execution service responsible for validation, application, stacking/refresh/replace behavior, expiration, modifier collection, reaction collection, and execution tracing.
+
+This model is a candidate direction, not a commitment to rename or replace the current Buff classes. The smallest migration path should be chosen only when concrete consumers prove the existing boundary insufficient.
+
+### ECS compatibility
+
+A future `EffectHost` could be represented by a lightweight Node/RefCounted component in the current Godot architecture while keeping an external contract that could later map to an ECS dynamic buffer if the project actually adopts ECS.
+
+Do not create one ECS component type per content effect. Dedicated structural components would only make sense when multiple systems need frequent direct queries of that state.
+
+ECS compatibility is a possible long-term property, not a current migration target.
+
+### Explicit event phases
+
+Trigger-heavy content may eventually need deterministic execution phases instead of relying on signal connection order or Dictionary iteration order.
+
+A damage flow, for example, could distinguish phases such as:
+
+1. request validation;
+2. base value construction;
+3. outgoing flat modifiers;
+4. outgoing multipliers;
+5. incoming modifiers;
+6. mitigation/block;
+7. authoritative state mutation;
+8. after-damage reactions;
+9. death resolution;
+10. after-death reactions.
+
+Pure calculation phases could transform values without side effects, while reaction phases could emit explicit follow-up work.
+
+These phase names and ordering are illustrative. They must be redesigned around the concrete combat/events that actually enter Scope.
+
+### Event queue and causality
+
+If effects begin generating derived events recursively, direct nested handler calls may become difficult to order and debug.
+
+A possible future solution is a deterministic event queue carrying data such as:
+
+- event ID;
+- root/parent event IDs;
+- source/target IDs;
+- originating effect instance ID where applicable;
+- phase and priority;
+- application/sequence order;
+- causality depth.
+
+Such a queue could define stable ordering plus limits for recursion, repeated activation, and causal depth. It should not be introduced until actual recursive/trigger interactions require those guarantees.
+
+### Typed domain commands
+
+Cross-system effects may eventually need explicit domain commands rather than arbitrary scene mutation. Candidate domains include combat, build, reward, grid, and presentation cues.
+
+If this becomes necessary, prefer small domain-specific command contracts over one universal command enum containing every imaginable behavior. Presentation cues should remain non-authoritative for gameplay mutation.
+
+### Deferred alternatives
+
+The following remain discussion-only until concrete Requirements justify them:
+
+- a universal visual effect graph;
+- full ECS migration;
+- a generic elemental/reaction engine;
+- networking or rollback infrastructure;
+- hot reload for arbitrary runtime effect definitions;
+- a universal command bus.
 
 ## Relationship to future changes
 
-If a new in-scope mechanic needs materially different trigger ordering, cross-system reactions, recursive derived events, or a different effect ownership model, that is a new architecture decision. Update or replace this System Design before projecting the corresponding Spec.
+If a new in-scope mechanic needs materially different trigger ordering, cross-system reactions, recursive derived events, or a different effect ownership model, revisit the Discussion above and the current implementation together.
 
-Do not automatically revive the former speculative EffectDefinition/EffectHost/ECS/event-queue proposal. Reuse the current lightweight runtime when it is sufficient; introduce a larger boundary only for concrete current consumers.
+Promote only the selected, revalidated conclusions into the normative sections of this System Design before projecting the corresponding Spec. Reuse the current lightweight runtime when it remains sufficient.
