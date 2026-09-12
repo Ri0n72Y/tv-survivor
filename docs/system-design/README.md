@@ -60,7 +60,7 @@ Discussion may include:
 - deferred integration questions;
 - ideas preserved from earlier technical exploration.
 
-Discussion is **not** part of the current authoritative design contract. It must not be projected directly into Spec or Task.
+Discussion is **not** part of the current authoritative design contract. It must not be projected directly into Spec or Task, and it must not be used as a reason to add abstractions, dependencies, migrations, or compatibility work to the current implementation.
 
 To promote a discussed direction into current architecture:
 
