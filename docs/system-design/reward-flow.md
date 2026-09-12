@@ -87,6 +87,30 @@ Scenes may coordinate when a reward is offered or displayed, but reward validity
 - Typed reward objects are the domain model; Dictionary values are compatibility representations.
 - Current weapon/passive identities, counts, prices, and reward pools are content choices, not System Design commitments.
 
+## Discussion
+
+> Non-authoritative. These points preserve future technical reasoning and must not be projected directly into Spec/Task.
+
+### Richer reward-pool rules
+
+If future Game Design introduces rarity, tags, synergies, professions/classes, build-direction bias, unlock conditions, or other pool-shaping rules, a preferred direction is to keep those rules explicit in typed option/pool data and deterministic filtering/weighting rather than scattering array shuffles and content-ID branches through scene code.
+
+`RandomPool` already supports a limited version of this direction through weights, repeat control, tag filters, unlock filters, and drawn-ID filters. That does not imply that every future reward rule belongs inside `RandomPool`; domain-specific eligibility may remain in the reward/content layer.
+
+### New reward kinds
+
+Future rewards may extend beyond weapon/passive upgrades. `RewardOption.Kind` and `RewardService` should only be generalized when concrete current rewards require it.
+
+Possible directions include additional typed reward variants or a broader reward payload contract, but a universal reward/economy framework should not be introduced solely because multiple future kinds are imaginable.
+
+### Compatibility removal
+
+The current Dictionary adapters are migration boundaries. A future refactor may remove them when all affected callers can use the typed reward model directly.
+
+That should be treated as an implementation/refactor Scope with verification of each caller, not as background cleanup performed merely because the adapters are labeled legacy.
+
 ## Relationship to future changes
 
 A new reward kind or economy rule may require Requirement/Game Design work before this document changes. If it only reuses the existing technical boundary, its Spec should rely on this System Design rather than inventing a new reward architecture.
+
+Discussion may inform future design work, but a discussed option becomes authoritative only after it is selected and promoted into the normative sections above.
