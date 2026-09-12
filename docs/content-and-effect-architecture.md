@@ -1,38 +1,47 @@
-# Content and Effect Architecture
+# Content and Effect Implementation Notes
+
+> **Status: implementation reference / legacy technical note.**
+>
+> This document records implementation patterns and earlier architecture thinking around content, rewards, buffs, and effects. It is **not current System Design authority** and must not be used by itself to introduce new architecture.
+>
+> When one of these capabilities enters a new Delivery or Validation Scope, inspect the current implementation first. If the change requires material technical decisions, establish or update `docs/system-design/<capability>.md`; then project the implementation contract into Spec. Existing details below may be reused only where they still match the code and current upstream authority.
 
 ## Purpose
 
-This document defines the engineering boundary required before large-scale content production. It applies to weapons, passives, rewards, future affixes, buffs, card-like effects, room effects, and cross-system outcomes.
+This note preserves two kinds of information:
 
-The current project does not yet contain a general runtime buff system. This document deliberately separates the infrastructure already justified by existing gameplay from future runtime-effect infrastructure that must be introduced only with a real gameplay consumer.
+1. **current implementation context** that helps explain the existing content pipeline; and
+2. **historical architecture proposals** that were considered before the current game-design-first SDD workflow existed.
 
-## Current content pipeline
+These categories are intentionally separated below. Historical proposals are context, not commitments.
+
+## Current implementation context
 
 ### Static definitions
 
-Static content is represented by typed Godot `Resource` definitions under `res://content/`.
+The current content pipeline represents static weapon and passive content with typed Godot `Resource` definitions under `res://content/`.
 
 - `WeaponDefinition` describes weapon identity, ordering, presentation, maximum level, and runtime factory reference.
 - `PassiveDefinition` describes passive identity, ordering, presentation, maximum level, and attribute contributions.
-- `WeaponDefinitions` and `PassiveDefinitions` are read-only catalog facades.
+- `WeaponDefinitions` and `PassiveDefinitions` act as read-only catalog facades.
 - `ResourceCatalog` discovers `.tres` and `.res` files recursively and sorts directory entries before loading.
 
-Adding a normal weapon or passive must not require editing a central static array. Duplicate IDs, invalid level descriptions, missing runtime implementations, and unknown attribute references are catalog validation errors.
+The current implementation allows a normal weapon or passive to be added without editing a central static array. Catalog validation covers duplicate IDs, invalid level descriptions, missing runtime implementations, and unknown attribute references.
 
 ### Runtime ownership
 
-Static definitions are shared and must be treated as immutable. Runtime state is owned elsewhere:
+The current implementation keeps shared static definitions separate from mutable runtime state:
 
 - weapon/passive levels are owned by `BuildState`;
 - weapon runtime nodes are owned by `WeaponManager`;
 - reward choices are represented internally by `RewardOption`;
 - battle transition results are represented by `BattleResult` and typed `BattleEffect` commands.
 
-Catalogs must never own duration, stack count, source entity, target entity, cooldown state, or other per-instance mutable data.
+Catalog definitions do not own per-instance duration, stack count, source entity, target entity, cooldown state, or equivalent mutable runtime data.
 
 ### Attribute aggregation
 
-Numeric passives contribute to named build attributes through `BuildAttributes`.
+Numeric passives currently contribute to named build attributes through `BuildAttributes`.
 
 Current attributes are:
 
@@ -44,23 +53,31 @@ Current attributes are:
 - `sync_regen_multiplier`
 - `gold_multiplier`
 
-A new passive that only contributes to existing attributes should require a new `PassiveDefinition` resource and no new `BuildState` branch. A new attribute still requires an explicit attribute definition, base value, bounds, runtime consumer, tests, and presentation rule.
+Within the existing implementation, a passive that only contributes to an existing attribute can be represented by a new `PassiveDefinition` resource without adding a `BuildState` branch. Introducing a genuinely new attribute has a wider impact surface and should be handled through the current Requirement / applicable System Design / Spec workflow rather than inferred from this note.
 
 ### Reward boundary
 
-`RewardOption` and `RewardResolution` are the typed reward model. `RewardService` performs validation and mutation using these types.
+`RewardOption` and `RewardResolution` are the current typed reward model. `RewardService` performs validation and mutation using these types.
 
-`BattleScene`, `GridScene`, and `RewardOverlay` still use Dictionary-shaped reward data through explicit compatibility adapters. This is a temporary migration boundary, not the target architecture. New reward kinds must be implemented in the typed model first and must not add more ad-hoc Dictionary keys to scene code.
+`BattleScene`, `GridScene`, and `RewardOverlay` also retain Dictionary-shaped reward data through compatibility adapters. Earlier architecture work treated this as a migration boundary. That historical intent is recorded here, but this document does not require a future migration or prescribe when it must occur.
 
-## Future runtime-effect model
+### Buff/effect implementation has moved on
 
-The first real timed, stacked, triggered, or entity-specific effect should introduce the following minimal model.
+An earlier version of this document stated that the project did not yet contain a runtime buff system. That statement is now stale.
+
+The repository currently contains a lightweight `BuffDefinition` / `BuffInstance` / `BuffContainer` / `BuffSystem` implementation used by synchronization-related battle states. See `docs/buff_system.md` and the current code under `scripts/battle/buffs/` for implementation context.
+
+This existing buff implementation does **not** automatically validate the broader historical effect architecture described below.
+
+## Historical runtime-effect proposal — non-authoritative
+
+The following model was proposed before a concrete general effect capability entered the current SDD workflow. It is preserved as design history only.
+
+**Do not implement or extend this model solely because it appears in this document.** If timed, stacked, triggered, card-like, relic-like, entity-specific, or cross-system effects enter current Scope, reassess the real gameplay case and current code first. Any material architecture that remains useful belongs in a new or updated System Design.
 
 ### EffectDefinition
 
-A shared, immutable static definition resolved through an effect catalog.
-
-It may describe:
+The historical proposal described a shared, immutable static definition resolved through an effect catalog. Candidate fields included:
 
 - stable content ID and presentation;
 - duration policy;
@@ -71,13 +88,11 @@ It may describe:
 - action or command definitions;
 - optional specialized behavior primitive.
 
-It must not contain mutable runtime duration, stack count, owner, source, or cooldown state.
+The proposal kept mutable runtime duration, stack count, owner, source, and cooldown state outside the static definition.
 
 ### EffectInstance
 
-A runtime value owned by one effect host or entity.
-
-Minimum identity fields:
+The historical proposal described a runtime value owned by one effect host or entity, with candidate identity/state such as:
 
 - stable instance ID;
 - definition ID;
@@ -88,13 +103,9 @@ Minimum identity fields:
 - application sequence number;
 - explicitly versioned runtime state when unavoidable.
 
-An effect catalog may locate the static definition for an instance. It must not become the owner of the instance itself.
-
 ### EffectHost or ECS component
 
-Each runtime owner stores its own effect instances.
-
-In the current Godot project, the initial implementation should be a lightweight `EffectHost` Node or RefCounted component. Its external contract should be compatible with a future ECS dynamic buffer:
+The historical proposal considered a lightweight `EffectHost` Node or RefCounted component whose external operations could include:
 
 - add an instance;
 - find by instance ID or definition ID;
@@ -103,13 +114,11 @@ In the current Godot project, the initial implementation should be a lightweight
 - expose read-only snapshots;
 - enumerate listeners by event phase.
 
-Do not create one ECS component type for every content effect. Separate structural states may become dedicated components only when multiple systems need to query them directly and frequently.
+It also considered future ECS compatibility. **No ECS compatibility requirement follows from this note.**
 
 ### EffectSystem
 
-The system owns lifecycle rules, not content catalogs and not scene UI.
-
-Responsibilities:
+The historical proposal assigned lifecycle responsibilities such as:
 
 - validate application;
 - create and attach instances;
@@ -121,11 +130,11 @@ Responsibilities:
 - emit typed gameplay commands;
 - produce deterministic debug traces.
 
+These are candidate responsibilities from the old architecture discussion, not current module ownership.
+
 ### Event phases
 
-Trigger-heavy content must not use signal connection order or Dictionary iteration order as gameplay ordering.
-
-Before card-like, relic-like, or reaction-heavy content is added, define explicit event phases. A combat damage flow may use phases such as:
+The historical proposal considered explicit event phases for trigger-heavy gameplay rather than relying on signal connection order or Dictionary iteration order. One example damage flow was:
 
 1. request validation;
 2. base value construction;
@@ -138,13 +147,11 @@ Before card-like, relic-like, or reaction-heavy content is added, define explici
 9. death resolution;
 10. after-death reactions.
 
-Pure calculation phases may transform a value but must not produce side effects. Reaction phases produce typed commands and derived events.
+No current Requirement or System Design commits the project to this phase model.
 
 ### Event queue and causality
 
-Derived events must enter a deterministic queue instead of recursively invoking arbitrary handlers.
-
-Every gameplay event should carry:
+The historical proposal also considered deterministic queued derived events carrying information such as:
 
 - event ID;
 - root and parent event IDs;
@@ -155,13 +162,11 @@ Every gameplay event should carry:
 - application or sequence order;
 - causality depth.
 
-The queue must define stable ordering and limits for recursion, repeated activation, and maximum causal depth.
+Limits for recursion, repeated activation, and causal depth were part of that proposal. They remain unimplemented design context unless a future scoped capability justifies them.
 
 ### Typed commands
 
-Cross-system effects should be represented as domain commands. Do not build one universal command enum containing every future behavior.
-
-Expected domains may include:
+The historical proposal favored domain-specific cross-system commands over one universal command enum. Candidate domains included:
 
 - combat commands;
 - build commands;
@@ -169,32 +174,34 @@ Expected domains may include:
 - grid commands;
 - presentation cues.
 
-Presentation cues must not own authoritative gameplay mutation.
+The existing project already uses some typed result/effect objects, but this historical list does not require a universal command architecture.
 
-## Content-authoring rule
+## Historical content-authoring guidance
 
-Normal content should be composed from existing definitions, attributes, conditions, triggers, actions, calculators, and commands.
+Earlier architecture work preferred normal content to reuse existing definitions, attributes, conditions, triggers, actions, calculators, and commands, with new script classes reserved for genuinely new behavior primitives.
 
-A new script is justified when the content introduces a genuinely new behavior primitive that cannot be expressed safely through existing primitives. Adding a different number, duration, target filter, stack limit, trigger phase, or combination of existing actions is not sufficient reason for a new script class.
+This remains useful as a Ponytail-compatible heuristic, but it is not an independent architecture authority. New content should follow the current Game Design, Requirement, applicable System Design, Spec, and actual implementation constraints.
 
-## Pre-content gate
+## Historical pre-content gate — non-authoritative
 
-Large-scale content production can begin when all applicable items below are true:
+An earlier roadmap proposed waiting for the following conditions before large-scale content production:
 
-- content resources are automatically discovered and deterministically ordered;
-- catalog validation runs in the headless smoke test;
-- runtime factories no longer branch on concrete content IDs;
-- common passive values use attribute aggregation rather than ID-specific formulas;
-- reward selection and resolution have typed domain objects;
-- scene compatibility adapters are isolated and scheduled for removal;
-- existing gameplay passes editor, headless, and manual regression testing;
-- the first triggered or timed effect is implemented through the EffectDefinition/EffectInstance/EffectHost boundary;
-- explicit event phases exist before multiple effects can react to the same event;
-- deterministic execution and causality guards exist before effects can generate recursive events.
+- content resources automatically discovered and deterministically ordered;
+- catalog validation in the headless smoke test;
+- runtime factories no longer branching on concrete content IDs;
+- common passive values using attribute aggregation rather than ID-specific formulas;
+- typed reward selection and resolution;
+- isolated scene compatibility adapters;
+- editor, headless, and manual regression coverage for existing gameplay;
+- a general EffectDefinition/EffectInstance/EffectHost boundary;
+- explicit event phases for multiple reactions;
+- deterministic execution and causality guards for recursive events.
 
-## Deferred work
+This list is retained as historical planning context only. It is **not a current Requirement, acceptance checklist, or prerequisite for future content work**.
 
-The following should not be implemented speculatively in this PR:
+## Historical deferred-work list
+
+Earlier work explicitly deferred:
 
 - a universal visual effect graph;
 - a full ECS migration;
@@ -203,4 +210,4 @@ The following should not be implemented speculatively in this PR:
 - hot-reload support for arbitrary runtime effect definitions;
 - a universal command bus.
 
-These systems require concrete gameplay cases and acceptance tests. Their future implementations must preserve the boundaries defined above.
+These items remain neither required nor prohibited by this note. If any becomes relevant, it must enter the current SDD flow from an actual Game Design / Requirement need rather than from this historical list.
