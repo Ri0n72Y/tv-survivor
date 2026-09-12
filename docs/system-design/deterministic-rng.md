@@ -2,7 +2,7 @@
 
 > Status: current cross-cutting System Design for gameplay randomness.
 >
-> This document records the technical boundary that keeps gameplay randomness reproducible and isolated from non-gameplay presentation randomness. It does not imply that every registered stream corresponds to a permanent gameplay feature.
+> This document records the technical boundary that keeps gameplay randomness reproducible and isolated from non-gameplay presentation randomness. It does not imply that every declared stream name corresponds to a permanent gameplay feature.
 
 ## Scope
 
@@ -31,7 +31,7 @@ A run reset starts the manager from the selected run seed. `RunState.rng_state()
 
 ## Named streams
 
-`RunRngManager` currently registers these stream names:
+`RunRngManager` currently declares conventional/default names for these random domains:
 
 - `map.route`
 - `grid.node`
@@ -45,7 +45,9 @@ A run reset starts the manager from the selected run seed. `RunState.rng_state()
 - `shop.refresh`
 - `meta.unlock`
 
-The stream registry is a technical namespace, not a Game Design roadmap. A registered stream may support current code, legacy code, or a capability that is not presently selected into development Scope.
+These constants/default names are a technical namespace convention, not a closed registry: `get_stream(stream_name)` lazily derives a stream from the run seed and the supplied name.
+
+The declared names are also not a Game Design roadmap. A name may support current code, legacy code, or a capability that is not presently selected into development Scope.
 
 In particular, `map.route` does not make arbitrary random main-map topology a current Requirement; the current Game Design prefers authored main-map structure.
 
@@ -53,7 +55,7 @@ In particular, `map.route` does not make arbitrary random main-map topology a cu
 
 Gameplay systems should use a stream whose name represents that random domain rather than sharing one mutable global gameplay RNG.
 
-A new independent gameplay-random domain should normally receive its own stream name so draws in one domain do not reorder the results of unrelated domains.
+A new independent gameplay-random domain should normally receive its own stable stream name so draws in one domain do not reorder the results of unrelated domains.
 
 Existing stream names should not be casually repurposed for unrelated random behavior because that changes replay/debug determinism for existing consumers.
 
@@ -99,8 +101,50 @@ Callers choose the appropriate named stream. `RandomPool` does not own the run s
 - A stream name is a technical namespace, not a permanent gameplay/content commitment.
 - Gameplay code should not call `randomize()`, `Array.shuffle()`, or equivalent system randomness when the result affects authoritative gameplay.
 
+## Discussion
+
+> Non-authoritative. These points preserve future technical reasoning and must not be projected directly into Spec/Task.
+
+### Full save/load integration
+
+If complete run persistence enters Requirement Scope, the RNG state will need to be coordinated with other persisted state rather than treated as a standalone save feature.
+
+A plausible complete-run save may need to preserve at least:
+
+- the current run seed;
+- each created RNG stream state;
+- pool state such as drawn/removed IDs where the pool itself has persistent semantics;
+- current map/exploration state;
+- opened or resolved reward state;
+- build state and other run-owned gameplay state.
+
+One candidate restore sequence is to restore the run seed/RNG streams before any system is allowed to perform new random draws, then restore the other authoritative run state before gameplay resumes.
+
+The exact save schema, ownership, versioning, and restoration order are not settled here. They require a dedicated persistence System Design once save/load is selected into Scope.
+
+### Replay and debugging
+
+The current stream model supports reproducible domain-local random sequences, but the project does not yet define a complete replay contract.
+
+If deterministic replay or detailed run debugging becomes important, open questions include:
+
+- whether seed + stream state is sufficient for the desired replay boundary;
+- whether external inputs/events must also be recorded;
+- whether stream draw counts should be surfaced in debug traces;
+- how version changes to stream derivation or content data should affect replay compatibility.
+
+Do not add replay infrastructure until a concrete debugging, testing, or player-facing use case requires it.
+
+### Pool evolution
+
+Future reward/event pools may use richer metadata such as rarity, tags, synergies, classes, or build-direction hints. Prefer deterministic data/filtering rules over ad-hoc non-deterministic array manipulation.
+
+Domain-specific eligibility still belongs with the owning gameplay/reward system; `RandomPool` should remain a small deterministic selection utility rather than becoming a universal content-rule engine.
+
 ## Relationship to future changes
 
-When a new feature only needs an independent deterministic stream, extending the registered stream namespace does not by itself require a new architecture.
+When a new feature only needs an independent deterministic stream, extending the stream namespace does not by itself require a new architecture.
 
 If a change alters seed ownership, stream derivation, replay semantics, persistence, or cross-system determinism, update this System Design before projecting the corresponding Spec.
+
+Discussion may inform that work, but only promoted normative decisions are authoritative.
