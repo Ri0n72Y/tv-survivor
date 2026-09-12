@@ -20,14 +20,26 @@ Reward purchase/application is documented separately in `reward-flow.md`. Buff r
 
 Static content is represented by typed Godot `Resource` definitions under `res://content/`.
 
-- `WeaponDefinition` owns weapon identity, presentation, ordering, maximum level, level descriptions, and the runtime factory reference needed to create the weapon behavior.
-- `PassiveDefinition` owns passive identity, presentation, ordering, maximum level, level descriptions, and attribute contributions.
-- `WeaponDefinitions` and `PassiveDefinitions` provide read-only catalog access to loaded definitions.
-- `ResourceCatalog` discovers `.tres` and `.res` resources recursively and uses deterministic directory ordering before loading.
+- `ContentDefinition` provides common content identity, presentation, level, sort-order, tag, and basic validation fields.
+- `WeaponDefinition` extends the content definition with weapon-specific level descriptions and the runtime factory reference needed to create weapon behavior.
+- `PassiveDefinition` extends the content definition with passive-specific level descriptions and attribute contributions.
+- `WeaponDefinitions` and `PassiveDefinitions` provide read-only catalog access to validated definitions.
 
 A normal weapon or passive should be added through content resources rather than by extending a central hard-coded content array.
 
-Catalog validation is responsible for rejecting invalid static definitions such as duplicate IDs, malformed level data, missing required runtime implementations, or unknown attribute references.
+## Discovery and validation boundary
+
+`ResourceCatalog` is the low-level loader. It recursively discovers `.tres` / `.res` files, sorts directory entries deterministically, loads resources, and reports load failures.
+
+It does **not** own all content validation.
+
+The typed catalog facades perform domain validation after loading:
+
+- `WeaponDefinitions` rejects unexpected resource types, definition validation errors, and duplicate weapon IDs;
+- `PassiveDefinitions` rejects unexpected resource types, definition validation errors, duplicate passive IDs, and unknown build-attribute references;
+- definition classes validate their own local data constraints.
+
+This separation should remain clear: resource discovery/loading belongs to `ResourceCatalog`; content-domain validity belongs to the relevant definition/catalog layer.
 
 ## Runtime ownership
 
@@ -72,11 +84,37 @@ This rule is a boundary against content-ID branching and speculative class proli
 - Static content definitions remain immutable during a run.
 - Mutable build state has a runtime owner and is not stored in catalogs.
 - Normal content discovery is data-driven and deterministically ordered.
+- Discovery/loading and domain validation remain separate responsibilities.
 - Adding ordinary content that uses existing behavior/attributes does not require a new `BuildState` branch.
 - The content model does not imply that Sync, any current weapon/passive set, or any future effect system is permanent Game Design.
+
+## Discussion
+
+> Non-authoritative. These points preserve future technical reasoning and must not be projected directly into Spec/Task.
+
+### Scaling content production
+
+If weapon/passive/content volume grows substantially, useful checks before large-scale authoring include:
+
+- keeping automatic discovery and deterministic ordering;
+- keeping catalog validation in headless verification;
+- avoiding runtime factories that branch on concrete content IDs;
+- expressing common passive values through reusable attributes rather than ID-specific formulas;
+- keeping typed reward-domain objects between content and mutation;
+- keeping compatibility adapters isolated rather than spreading legacy shapes through new code.
+
+This is a scaling checklist, not a current release gate. Each item should be re-evaluated against the actual content workload when it becomes relevant.
+
+### More expressive content primitives
+
+Future content may require conditions, triggers, actions, calculators, tags, or other reusable behavior primitives beyond the current weapon/passive model.
+
+A possible direction is to keep ordinary content data-driven while allowing a new script only for a genuinely new behavior primitive. The exact abstraction should be chosen from concrete content cases rather than by building a universal effect language in advance.
+
+Generalized runtime effects, event phases, event queues, and ECS compatibility are discussed in `buff-runtime.md` because they concern runtime effect ownership and execution rather than static content discovery alone.
 
 ## Relationship to future changes
 
 When a new content capability changes ownership, state shape, catalog rules, or the definition/runtime boundary, update this document if those decisions are material and durable.
 
-Do not revive the former speculative `EffectDefinition` / ECS / universal event-queue design merely because the old document contained it. Such architecture must be justified again by a current Requirement and concrete consumers.
+Discussion may inform that work, but it does not become current architecture until the relevant Requirement selects the capability and the accepted conclusion is promoted into the normative sections above.
