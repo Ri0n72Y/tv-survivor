@@ -1,15 +1,15 @@
 # System Design
 
-`docs/system-design/` contains the technical/software design for capabilities that are actually entering implementation or refactoring.
+`docs/system-design/` contains the technical/software design for capabilities that are actually entering implementation or refactoring and require material technical decisions to be settled.
 
-System Design sits between the current version Requirement and Spec:
+The normal authority flow is:
 
 ```text
 Game Design
     ↓
-Requirement (current version Scope)
+Requirement
     ↓
-System Design
+System Design (when applicable)
     ↓
 Spec
     ↓
@@ -17,6 +17,8 @@ Task
     ↓
 Implementation
 ```
+
+System Design is an authority layer, not a mandatory document for every change.
 
 ## Purpose
 
@@ -31,7 +33,7 @@ System Design answers implementation-structural questions that should be settled
 - material technical invariants;
 - whether an existing project mechanism is sufficient or a new boundary is truly required.
 
-It should contain enough technical structure that Spec projection does not need to make hidden architecture decisions.
+When such decisions are material to the change, System Design should contain enough technical structure that Spec projection does not need to make hidden architecture decisions.
 
 ## When to create one
 
@@ -42,7 +44,7 @@ Create or update a System Design only when:
 
 Do not create System Design documents merely to describe untouched legacy code.
 
-Small changes that fit an already-settled technical structure do not need a new System Design document.
+Small changes that fit an already-settled technical structure do not need a new System Design document. In that case, the affected code path and any still-valid technical references provide implementation context, while Spec constrains the local change without inventing new architecture.
 
 ## Design constraints
 
@@ -73,7 +75,9 @@ When a capability enters the current Requirement:
 
 ## Relationship to Spec
 
-Spec projects the settled Requirement + System Design into a locally executable implementation contract.
+Spec projects the settled Requirement plus any applicable System Design into a locally executable implementation contract.
+
+If no new System Design is warranted because the change fits an already-settled technical structure, Spec may rely on that existing structure after the affected code path has been inspected.
 
 If writing a Spec exposes an unresolved question about ownership, data architecture, dependency direction, lifecycle, interface, or another material technical choice, stop and resolve System Design first.
 
