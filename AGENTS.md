@@ -68,7 +68,8 @@ Do not silently graduate prototype shortcuts into permanent architecture.
 - If several technically plausible choices materially change architecture, surface the trade-off instead of silently choosing inside Spec or implementation.
 - Do not create a System Design merely to complete the document chain. If a change fits an already-settled technical structure and introduces no material architecture decision, no new System Design document is required.
 - Do not mass-promote legacy technical notes into System Design merely because they exist. Preserve only boundaries that have been revalidated and are worth treating as current authority.
-- Do not create generalized architecture merely because future Game Design might use it. Future replaceability is a design direction; current abstractions require a current consumer.
+- A System Design may contain explicitly labeled **Discussion** sections for future directions, alternatives, unresolved questions, and preserved design reasoning. Discussion is non-authoritative: Spec and Task must not implement it directly. A discussed direction becomes authority only after the current Requirement selects the capability and the settled technical decision is moved into the normative System Design outside Discussion.
+- Do not create generalized architecture merely because future Game Design might use it. Future replaceability is a design direction. A current abstraction requires a current consumer; speculative alternatives belong in Discussion until they are selected.
 
 ## Spec rules
 
@@ -76,6 +77,7 @@ Do not silently graduate prototype shortcuts into permanent architecture.
 - Create or update a Spec only when a capability is actually being refactored or newly developed.
 - Project the current Requirement + any applicable System Design into the smallest locally executable contract.
 - If no new System Design is warranted because the change fits an already-settled technical structure, the Spec may rely on that existing structure after the affected code path has been inspected; it must not invent new architecture merely to fill the missing layer.
+- Ignore non-authoritative System Design Discussion when projecting a Spec unless its conclusion has first been promoted into the normative design.
 - A Spec should cover only what the implementation agent needs: observable behavior, capability boundary, ownership, contracts/invariants, allowed/prohibited change surface, failure behavior, and proportionate verification.
 - Spec must not invent gameplay, Scope, or material architecture. If projection requires one, return to Game Design, Requirement, or System Design at the earliest missing layer.
 
