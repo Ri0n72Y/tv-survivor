@@ -1,61 +1,240 @@
-# Game Requirements
+# Current Prototype Requirements
 
-This document is the current Requirement authority for the project. It describes intended outcomes and constraints, not the current code structure.
+> 状态：已有代码认领基线。
+>
+> 本文件从当前 Game Design 与已经跑通的原型实现中，确认哪些能力属于项目当前认可的可玩基线。
+>
+> 这不是完整 Game Design，也不是“代码里有什么就全部升级成 Requirement”。只有与当前设计方向仍一致、并且已经形成有效玩法能力的部分才在这里被认领。
+>
+> 本次仅确认已有能力，不启动新的开发工作，因此不要求为这些旧代码补写 Spec。后续只有当某项能力进入新的开发、重构或替换 Scope 时，才按当前 SDD 流程进入 System Design / Spec / Task。
 
-## Product direction
+## 1. Design sources
 
-Build a small, replayable 2D survivor-like prototype in Godot 4.x + GDScript where an abstract exploration structure and real-time local battles form one continuous decision loop.
+当前认领依据：
 
-The structure layer must not become a travel menu. The player should read incomplete information, choose where to go, spend or preserve resources, accept risk, and see battle outcomes change later exploration.
+- `docs/design/game-concept.md`
+- `docs/design/exploration-design.md`
+- `docs/design/array-exploration.md`
 
-The battle layer must not become an isolated minigame. Conditions chosen or accumulated in exploration must affect local battle, and meaningful battle results must return to the structure layer.
+其中当前 Game Design 已确认：
 
-## Current playable loop to preserve during refactoring
+- 阵列式世界泡探索是长期核心 Gameplay；
+- 阵列本身承担移动、信息、资源、事件、风险和内容表达；
+- 局部玩法从阵列事件中展开，并在结束后把结果回流到阵列；
+- 当前首个世界泡以类幸存者作为主要局部玩法；
+- 未来世界泡可以拥有不同局部玩法，因此类幸存者不能被视为整个游戏唯一玩法；
+- 当前长期方向采用设计好的主地图骨架，以事件和特殊模板承担主要随机变化，而不是依赖完全随机拓扑。
 
-Unless a later Requirement explicitly changes them, refactoring must preserve the currently accepted prototype capabilities:
+## 2. Requirement role
 
-- abstract/tree-like node exploration with hidden/revealed/cleared state and constrained connections;
-- movement between valid connected nodes, camera follow/centering, and minimap feedback;
-- resource/reward nodes and battle rooms;
-- search, elite, and Boss battle flows;
-- real-time automatic-weapon combat;
-- synchronization/sync state as a meaningful battle resource;
-- weapon and passive build progression with slot and level limits;
-- paid and free reward paths with invalid reward rejection;
-- battle results returning to the exploration/run state;
-- extraction or room completion where the room design calls for it;
-- Boss victory ending the run.
+本轮 Requirement 的目标是 **认领现有原型已经证明可工作的能力**。
 
-## Exploration requirements
+认领分为两类：
 
-Every meaningful structure-layer action should change at least one of:
+### 2.1 Owned baseline
 
-- information;
-- resources;
-- risk;
-- structure/path availability;
-- state;
-- narrative/context.
+与当前 Game Design 已经一致的能力。后续普通重构不得无意破坏，除非新的 Game Design / Requirement 明确改变它。
 
-Unknown information should create judgment, not arbitrary punishment. Risk should support the question of whether to continue, redirect, or stop. Retreat, extraction, or abandoning optional value may be valid strategic choices rather than automatic failure.
+### 2.2 Provisional prototype content
 
-Repeated or already-known structure content should be compressible or faster than first discovery; the system should not turn repeated exploration into low-value manual travel.
+已经跑通并具有继续复用价值，但 Game Design 尚未确认其具体规则必须长期保留的原型内容。
 
-## Content and presentation constraints
+它们是有效实现资产和玩法证据，但可以在后续设计中被替换、调整或删除，不因为已经存在就自动成为永久规则。
 
-- Core project logic remains text-based and diff-friendly.
-- Prototype visuals may remain geometric/placeholders while mechanics are being validated.
-- Ordinary content variation should prefer data/resources and existing behavior primitives over new script classes.
-- New gameplay systems are not justified solely because they may be useful for future content.
+## 3. Owned baseline
 
-## Refactoring constraints
+### 3.1 阵列探索可以独立成立
 
-- Refactoring must not silently redesign gameplay.
-- Existing code is evidence of current implementation, not authority over this Requirement.
-- If a refactor discovers that preserving the intended behavior requires a material design decision, that decision belongs in Design before implementation continues.
-- Do not create compatibility layers, factories, event systems, generalized effect engines, or module boundaries without a current consumer that requires them.
-- Untouched legacy code does not need a retroactive Spec.
+当前原型已经具备可操作的阵列探索层，项目认领以下能力：
 
-## Verification direction
+- 地图由可连接的探索节点构成；
+- 节点可以处于隐藏、已揭示、已访问/已处理等不同探索状态；
+- 玩家只能沿当前允许的连接进入有效节点；
+- 到达节点能够揭示后续可探索空间；
+- 已探索、当前位置和可见空间能够通过阵列视图与小地图获得反馈；
+- 阵列节点可以承载不同内容，而不只是作为进入战斗的按钮；
+- 节点处理结果能够持续保存在本次 Run 的阵列状态中。
 
-Verification follows the actual change surface. Protect user-observable behavior, non-trivial state transitions, important data/contracts, and reproduced regressions. Do not add tests only to increase counts, symmetry, or coverage percentage.
+这里认领的是 **连接、揭示、移动、状态持续和节点内容承载能力**，不认领当前随机树形拓扑本身。
+
+### 3.2 阵列可以展开局部玩法并返回
+
+当前原型已经跑通以下闭环：
+
+```text
+阵列探索
+    ↓
+进入需要局部玩法的节点
+    ↓
+创建该节点对应的局部玩法上下文
+    ↓
+展开类幸存者局部玩法
+    ↓
+生成局部玩法结果
+    ↓
+返回阵列
+    ↓
+结果改变节点或后续探索状态
+```
+
+项目正式认领这一 **展开—结算—回流** 能力。
+
+后续即使增加其他世界泡或其他局部玩法，也应保留“阵列负责组织探索，局部玩法完成后把结果交还阵列”的基本关系。
+
+### 3.3 局部玩法结果可以改变阵列状态
+
+当前实现已经能够让局部玩法结果产生阵列后果，包括：
+
+- 成功后清理当前房间；
+- 根据结果揭示新的节点或附近空间；
+- 保存影响下一次局部玩法的状态；
+- 失败时返回或回退阵列位置；
+- 清除本次阵列到局部玩法之间的过渡状态。
+
+项目认领的是 **局部玩法结果可产生结构层后果** 这一能力，而不是当前每一种结果效果的最终名单。
+
+### 3.4 当前世界泡具有可玩的类幸存者局部玩法
+
+首个世界泡当前已经拥有可运行的实时局部玩法，项目认领以下基础体验：
+
+- 玩家在实时场景中移动与走位；
+- 武器能够自动执行攻击；
+- 敌人持续产生并形成生存压力；
+- 战斗压力能够随过程提高；
+- 玩家能够拾取或获得战斗资源；
+- 局部玩法拥有成功、失败和结束条件；
+- 结束后能够生成结果并返回阵列。
+
+类幸存者玩法是 **当前首个世界泡的主要局部玩法基线**，不是全局唯一玩法 Requirement。
+
+### 3.5 Run 内构筑能够持续成长
+
+当前原型已经具备一套可用的局部玩法构筑循环，项目认领以下能力：
+
+- 玩家拥有武器与被动构筑；
+- 武器和被动可以拥有等级；
+- 构筑存在可用槽位限制；
+- 构筑升级能够影响战斗属性和实际玩法表现；
+- 阵列奖励和局部玩法奖励都可以进入同一个 Run 内构筑状态；
+- 构筑状态能够跨多次局部玩法持续存在，直到当前 Run 结束。
+
+具体武器、被动名称、数量、数值和当前实现方式不属于本 Requirement 的永久约束。
+
+### 3.6 资源与奖励形成跨层反馈
+
+当前原型已经跑通金币与奖励选择，项目认领：
+
+- Run 内存在可以获得和消耗的资源；
+- 阵列节点和局部玩法都可以提供奖励；
+- 奖励能够修改当前构筑；
+- 奖励可以存在免费取得和支付资源取得两类路径；
+- 无效、重复或超出允许范围的奖励不会被正常应用；
+- 失败的购买/应用不会错误消耗对应资源。
+
+具体资源名称、价格和奖励池属于后续内容设计，不在这里固定。
+
+## 4. Provisional prototype content
+
+以下内容已经跑通，因此被项目承认为可继续使用的原型资产；但当前 Game Design 尚未要求其具体形式长期不变。
+
+### 4.1 Search / Elite / Boss 房间
+
+当前原型存在多种局部玩法房间，并已经能表现不同目标和规则，例如：
+
+- Search 房中的宝箱、祭坛与撤离过程；
+- Elite 房中的持续压力与难度升级；
+- Boss 房中的 Boss 击杀目标。
+
+项目认领“**同一种局部玩法可以根据阵列事件/房间获得不同规则和目标**”这一能力。
+
+`search`、`elite`、`boss` 这些具体分类和当前细节属于首个世界泡的暂定原型内容，可在后续关卡设计中重新组织。
+
+`task` 房属于旧实现兼容内容，不作为当前 Game Design 的正式 Requirement。
+
+### 4.2 Sync / 信号机制
+
+当前局部玩法已经存在同步率、信号区域、失联、恢复和相关 Buff/被动效果。
+
+这一机制证明了局部玩法可以拥有独立于生命值之外的持续状态资源，也可以把一次局部玩法的结果带到下一次局部玩法。
+
+当前 Requirement 保留其作为可工作的原型能力，但 **Sync 本身尚未被 Game Design 确认为所有世界泡或首个世界泡最终必须使用的核心资源**。
+
+在新的设计决定出现前，普通重构不应无理由破坏现有 Sync 玩法；后续可以由 Game Design 明确保留、改造或替换。
+
+### 4.3 当前武器、被动和奖励内容
+
+现有武器、被动、奖励数据已经能够支撑完整构筑与战斗验证，因此作为首个世界泡的原型内容继续有效。
+
+Requirement 认领的是它们提供的 **构筑能力和内容生产基础**，不固定：
+
+- 当前内容数量；
+- 当前 ID；
+- 当前数值；
+- 当前表现主题；
+- 当前内容是否最终参考或替换为《银河球棒侠传说》方向。
+
+## 5. Existing code not promoted to Requirement
+
+以下已有实现不因“已经能运行”而成为当前设计承诺。
+
+### 5.1 随机树形主地图
+
+当前默认地图通过随机生长树形节点并随机分配 Search / Elite / Chest / Boss 等房间。
+
+新的 Game Design 已经选择：
+
+> 主地图形状、关键路径和空间节奏主要由关卡设计控制；随机主要作用于事件、内容配置以及被明确设计为随机机制的特殊地图模板。
+
+因此：
+
+- 当前随机树生成器可以继续作为旧原型、测试工具或未来特殊地图实验基础；
+- **随机树拓扑不是当前主地图 Requirement**；
+- 后续重做首个世界泡地图时，不需要为了兼容这一旧行为而牺牲新的关卡设计。
+
+### 5.2 Boss 清理即整局结束
+
+当前原型以 Boss 清理作为 Run 结束条件。
+
+Game Design 已经进一步引入世界泡、三层/三大关、撤离、成果带回等概念，因此当前 Boss 结束逻辑只属于旧原型闭环，不在本轮认领为长期 Run 结构。
+
+### 5.3 当前场景、脚本和 Dictionary 边界
+
+现有 `GridScene`、`BattleScene`、`RunState`、奖励兼容接口等能够证明当前玩法已经跑通，但它们属于实现证据。
+
+Requirement 不认领：
+
+- 某个具体脚本必须继续承担当前所有职责；
+- 当前 Dictionary 数据形状必须永久兼容；
+- 当前场景边界就是未来世界泡/局部玩法架构；
+- 当前类幸存者实现必须成为所有局部玩法的基类或通用框架。
+
+这些问题只在真正进入重构 Scope 时由 System Design 决定。
+
+## 6. Designed but not yet claimed as implemented
+
+以下已经进入当前 Game Design，但旧代码尚未形成对应的完整可玩能力，因此 **本轮不假装它们已经实现**：
+
+- 世界泡观测装置与世界泡选择；
+- 自动探索机器人的明确玩家/世界内表现；
+- 侵蚀的探索累积；
+- 净化、延缓侵蚀及侵蚀相关事件；
+- 安全屋的无侵蚀休整、提交和整备；
+- 固定主地图骨架 + 随机事件的关卡组织方式；
+- 三层 / 三大关内容结构；
+- 赛博显像管风格的完整阵列视觉表现；
+- 收藏品带回与长期收藏循环；
+- 多世界泡与不同局部玩法切换。
+
+这些内容继续属于 Game Design。只有当我们选择其中一部分作为下一阶段开发 Scope 时，再从 Design 抽取新的 Delivery / Validation Requirement。
+
+## 7. Acceptance of this baseline
+
+这份 Requirement 本身不要求新增代码。
+
+它完成的标准是：
+
+1. 明确区分已经被当前设计认领的可玩能力与纯历史实现；
+2. 后续开发不会因为重构而无意破坏 Owned baseline；
+3. 后续设计不会因为某项旧代码已经存在，就被迫把它保留为永久玩法；
+4. 未实现的新 Game Design 不会被描述成已经存在的功能；
+5. 对这些已有代码的认领不触发追溯式 Spec / System Design 补写。
