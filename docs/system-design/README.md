@@ -46,7 +46,31 @@ The following existing technical boundaries have been revalidated against the cu
 
 These documents describe technical boundaries, not permanent gameplay content. For example, `buff-runtime.md` does not promote Sync from provisional prototype content to permanent Game Design, and `deterministic-rng.md` does not promote random main-map topology back into Requirement.
 
-The former root-level notes `docs/content-and-effect-architecture.md`, `docs/buff_system.md`, and `docs/rng.md` were split into these current designs. Speculative future architecture from those notes was intentionally not migrated; Git history remains available if historical context is needed.
+The former root-level notes `docs/content-and-effect-architecture.md`, `docs/buff_system.md`, and `docs/rng.md` were split into these current designs. Still-useful future architecture and open questions are retained in explicitly non-authoritative `Discussion` sections rather than being treated as current implementation commitments.
+
+## Discussion sections
+
+A System Design may contain a `Discussion` section to preserve technical ideas that are useful to future work but are not currently selected or settled.
+
+Discussion may include:
+
+- candidate future architecture;
+- alternatives and trade-offs;
+- scaling concerns;
+- deferred integration questions;
+- ideas preserved from earlier technical exploration.
+
+Discussion is **not** part of the current authoritative design contract. It must not be projected directly into Spec or Task.
+
+To promote a discussed direction into current architecture:
+
+1. the relevant capability must be selected by the current Requirement;
+2. inspect the current implementation and affected boundaries;
+3. settle the material technical decision;
+4. move the accepted conclusion out of Discussion into the normative part of the relevant System Design;
+5. then project the affected Spec/Task.
+
+This lets the repository retain forward-looking reasoning without silently implementing speculative infrastructure.
 
 ## When to create or update one
 
@@ -71,7 +95,7 @@ Prefer, in order:
 
 Do not build generalized plugin systems, event frameworks, factories, interfaces, or extensibility layers solely because future Game Design may eventually contain multiple worlds or gameplay types.
 
-Future replaceability is a design direction. A current abstraction requires a current implementation consumer and a concrete boundary worth preserving.
+Future replaceability is a design direction. A current abstraction requires a current implementation consumer and a concrete boundary worth preserving. Unselected alternatives belong in Discussion, not in the normative design.
 
 ## Relationship to implementation evidence
 
@@ -86,16 +110,18 @@ When a current System Design and implementation disagree during a new change:
 
 ## Relationship to Spec
 
-Spec projects the settled Requirement plus any applicable System Design into a locally executable implementation contract.
+Spec projects the settled Requirement plus any applicable normative System Design into a locally executable implementation contract.
 
 If no new System Design is warranted because the change fits an already-settled technical structure, the Spec should rely on the applicable existing System Design after the affected code path has been inspected.
 
 If writing a Spec exposes an unresolved question about ownership, data architecture, dependency direction, lifecycle, interface, or another material technical choice, stop and resolve System Design first.
 
-Spec should constrain implementation; it should not become the place where architecture is invented.
+Discussion is context only. Spec should constrain implementation; it should not choose among unresolved Discussion alternatives or promote them implicitly.
 
 ## Delta changes
 
 When Requirement changes, first determine which System Designs are actually affected.
 
-When System Design changes, re-project only the dependent Specs and rebuild only their affected Tasks. Preserve unaffected documents and behavior.
+When normative System Design changes, re-project only the dependent Specs and rebuild only their affected Tasks. Preserve unaffected documents and behavior.
+
+Discussion may evolve without invalidating downstream artifacts unless a discussed conclusion is promoted into the normative design.
