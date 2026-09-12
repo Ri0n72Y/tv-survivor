@@ -1,6 +1,6 @@
 # 开发简报索引
 
-> **Legacy snapshot**：本目录记录 SDD 工作流建立前的工程状态与架构讨论，仅用于理解历史代码。当前开发权威为仓库根目录 `AGENTS.md`、`docs/requirements.md`、`docs/design/`，以及针对正在重构/新开发能力产生的 `docs/specs/`。普通开发不再更新本目录，也不据此给旧代码补写 Spec。
+> **Legacy snapshot**：本目录记录 Game Design-first SDD 建立前的工程状态与架构讨论，仅用于理解历史代码。当前流程权威见仓库根目录 `AGENTS.md`：`docs/design/` → `docs/requirements.md` → `docs/system-design/` → `docs/specs/` → Task。普通开发不再更新本目录，也不据此给旧代码补写 System Design 或 Spec。
 
 ## 基线
 
