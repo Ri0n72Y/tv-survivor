@@ -1,49 +1,76 @@
-# 确定性 RNG 约定
+# 确定性 RNG 实现说明
 
-## 总原则
+> **状态：implementation reference / legacy technical note。**
+>
+> 本文件记录当前 Run RNG 的实现约定，便于理解现有确定性随机代码。它不是独立的 System Design 权威，也不自动要求未来所有随机、存档或内容系统沿用这里的全部细节。
+>
+> 当随机、存档、地图生成、奖励池等能力进入新的开发/重构 Scope 时，应先检查当前代码与 Requirement；只有出现需要长期保留的材料技术决策时，才建立或更新对应的 `docs/system-design/`，随后生成 Spec。
 
-所有 gameplay 随机必须通过 `RunState.rng_stream(stream_name)` 或 `RunState.rng_manager` 获取，禁止在 gameplay 代码里直接调用 `RandomNumberGenerator.new().randomize()`、`Array.shuffle()` 或其他系统随机。
+## 当前实现原则
 
-同一局由 `RunState.grid_seed` 作为 run seed。`RunState.reset_run(seed)` 会使用指定 seed 重置整局 RNG；不传 seed 时会从非 gameplay RNG 生成一个新 seed。存档恢复时应调用 `RunState.restore_rng_state(saved_rng_state)`。
+当前 gameplay 随机通过 `RunState.rng_stream(stream_name)` 或 `RunState.rng_manager` 获取，以保持同一 run seed 下的确定性行为。Gameplay 代码不应直接用独立 `RandomNumberGenerator.randomize()`、`Array.shuffle()` 或其他非确定随机替代现有命名流，否则会破坏当前复现能力。
 
-UI、动画、粒子、音效抖动等非玩法表现不能消耗 gameplay RNG。需要非确定表现时，使用 `RunRngManager.create_visual_rng()` 或局部非确定随机，并确保它不会影响地图、战斗、奖励和商店逻辑。
+同一局当前由 `RunState.grid_seed` 作为 run seed。`RunState.reset_run(seed)` 使用指定 seed 重置整局 RNG；未显式提供 seed 时，RunState 会从非 gameplay 随机源生成新 seed。`RunRngManager` 可以保存和恢复已经创建的命名随机流状态。
 
-## 命名随机流
+UI、动画、粒子、音效抖动等非 gameplay 表现不应消耗 gameplay RNG。当前代码提供 `RunRngManager.create_visual_rng()` 用于独立的非确定表现随机。
 
-- `map.route`：大地图、路线、地图 fallback 生成。
-- `grid.node`：阵列节点内容的未来扩展。
-- `event.content`：事件内容、事件选项。
-- `battle.spawn`：战斗刷怪、刷怪位置、刷怪变体。
-- `battle.affix`：精英、Boss、房间词缀。
-- `chest.type`：宝箱类型、阵列宝箱基础价格层级；阵列宝箱会在开启时按当前总等级难度追加固定加价。
-- `chest.reward`：宝箱奖励抽取，按开启顺序消耗。
-- `reward.weapon`：武器奖励、精英奖励等武器相关抽取。
-- `reward.passive`：被动奖励相关抽取。
-- `shop.refresh`：商店刷新、商店货架。
-- `meta.unlock`：局外解锁或未来扩展。
+这些描述是对当前实现不变量的记录。若未来 Requirement 有意改变确定性、存档或复现策略，应通过新的 Scope / applicable System Design 更新，而不是把本文件视为不可改变的上游设计。
 
-新增系统时添加新的流名，不复用已有流。新增流只会从 run seed 和流名派生自己的状态，不会改变旧流结果。
+## 当前已注册的命名随机流
 
-## 奖励池接口
+`RunRngManager` 当前注册以下默认流名：
 
-`scripts/core/RandomPool.gd` 提供基础池抽取：
+- `map.route`
+- `grid.node`
+- `event.content`
+- `battle.spawn`
+- `battle.affix`
+- `chest.type`
+- `chest.reward`
+- `reward.weapon`
+- `reward.passive`
+- `shop.refresh`
+- `meta.unlock`
 
-- 权重抽取：字典项使用 `weight` 字段。
-- 不重复抽取：`allow_repeats = false`。
-- 条件过滤：`required_tags`、`blocked_tags`。
-- 解锁过滤：`unlocked_ids`。
-- 已抽取过滤：`drawn_ids`。
-- 不同来源传入不同流，例如宝箱用 `chest.reward`，商店用 `shop.refresh`。
+这些名称存在于当前实现中，但并不表示每个流都已经对应当前 Game Design 中的正式系统，也不保证所有未来系统必须继续使用这些名称。
 
-未来稀有度、标签、羁绊、职业、构筑方向等规则应优先落到池数据字段和过滤参数里，不要在业务代码里临时打乱数组。
+当前 `RunRngManager` 会根据 run seed 与 stream name 派生独立流状态，因此不同命名流可以避免互相消耗随机序列。
 
-## 存档内容
+新增或调整随机域时，应优先保持当前 gameplay 确定性行为，除非 Requirement / applicable System Design 明确改变这一约束。是否复用、删除或新增流名，应根据真实调用关系决定，而不是仅为了维持本列表的形式完整。
 
-存档至少保存：
+## 当前随机池工具
 
-- 当前 run seed：`RunState.grid_seed`。
-- RNG 状态：`RunState.rng_state()` 返回的 `run_seed`、各命名流的 `seed`、`state`、`draw_count`。
-- 池状态：奖励池、道具池、商店池等已抽取 ID 或已移除项。
-- 当前 run 进度：地图、已开宝箱、已清理房间、已有武器/被动等。
+`scripts/core/RandomPool.gd` 提供当前代码使用的基础池抽取能力，包括：
 
-读档后先恢复 run seed 和 RNG 状态，再恢复地图/池/角色状态，之后继续抽取才能保持确定性。
+- 权重抽取；
+- 可选的不重复抽取；
+- `required_tags` / `blocked_tags` 条件过滤；
+- `unlocked_ids` 解锁过滤；
+- `drawn_ids` 已抽取过滤。
+
+调用方可使用不同命名 RNG 流隔离不同随机来源。
+
+早期文档曾建议未来稀有度、标签、羁绊、职业、构筑方向等规则优先通过池数据和过滤参数表达。该内容现仅保留为历史实现思路，**不是未来内容系统的 Requirement 或 System Design**。
+
+## RNG 状态保存能力
+
+当前 `RunRngManager.save_state()` 保存：
+
+- `run_seed`；
+- 已创建命名流各自的保存状态。
+
+每个 `RunRngStream` 的具体保存字段以当前代码为准。恢复时，`RunRngManager.restore_state()` 会重建这些流。
+
+这说明当前 RNG 层本身具备保存/恢复能力，但项目当前并未因为本文件而承诺完整存档系统的最终数据结构或恢复顺序。
+
+## 历史存档建议 — 非权威
+
+旧文档曾提出完整 Run 存档至少还应包含：
+
+- 当前 run seed；
+- RNG 流状态；
+- 奖励池、道具池、商店池等池状态；
+- 地图、已开宝箱、已清理房间、已有武器/被动等 Run 进度；
+- 恢复时先恢复 RNG，再恢复其他状态。
+
+这些内容属于当时的架构建议，并不等于当前已经存在完整存档 Requirement。未来若正式开发存档/读档能力，应重新从 Game Design / Requirement 出发确定玩家可见行为，再由 applicable System Design 决定持久化数据、恢复顺序和兼容策略。
