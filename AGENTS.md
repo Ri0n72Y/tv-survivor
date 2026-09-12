@@ -60,12 +60,14 @@ Do not silently graduate prototype shortcuts into permanent architecture.
 
 ## System Design rules
 
-- Create or update System Design only for capabilities that are entering implementation/refactoring and need material technical structure to be settled.
+- Create or update System Design for capabilities entering implementation/refactoring when material technical structure must be settled.
+- An existing technical boundary may also be adopted as a current System Design baseline after it is explicitly revalidated against the current Requirement, Game Design, and implementation. This adoption does not require retroactive Spec or Task backfill.
 - Read the affected code path end to end before deciding placement or boundaries.
 - Prefer existing Godot/project mechanisms and the smallest architecture that satisfies the current Requirement.
 - System Design owns material technical decisions: capability ownership, dependency direction, state/data model, lifecycle, interfaces/protocols, persistence/runtime choices, and integration boundaries.
 - If several technically plausible choices materially change architecture, surface the trade-off instead of silently choosing inside Spec or implementation.
 - Do not create a System Design merely to complete the document chain. If a change fits an already-settled technical structure and introduces no material architecture decision, no new System Design document is required.
+- Do not mass-promote legacy technical notes into System Design merely because they exist. Preserve only boundaries that have been revalidated and are worth treating as current authority.
 - Do not create generalized architecture merely because future Game Design might use it. Future replaceability is a design direction; current abstractions require a current consumer.
 
 ## Spec rules
