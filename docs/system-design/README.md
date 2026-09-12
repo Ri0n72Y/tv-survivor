@@ -35,16 +35,53 @@ System Design answers implementation-structural questions that should be settled
 
 When such decisions are material to the change, System Design should contain enough technical structure that Spec projection does not need to make hidden architecture decisions.
 
-## When to create one
+## Current baseline designs
 
-Create or update a System Design only when:
+The following existing technical boundaries have been revalidated against the current implementation and are now part of the active System Design layer:
 
-- the capability is selected by the current Requirement; and
+- `content-model.md` — static weapon/passive definitions, catalog discovery, mutable build ownership, and build-attribute aggregation;
+- `reward-flow.md` — typed reward generation, validation, payment/application ordering, and the current Dictionary compatibility boundary;
+- `buff-runtime.md` — the lightweight timed/stacked battle-status runtime currently used by Sync-related prototype content;
+- `deterministic-rng.md` — run-owned deterministic gameplay RNG, named stream isolation, visual-random separation, and RNG state restoration.
+
+These documents describe technical boundaries, not permanent gameplay content. For example, `buff-runtime.md` does not promote Sync from provisional prototype content to permanent Game Design, and `deterministic-rng.md` does not promote random main-map topology back into Requirement.
+
+The former root-level notes `docs/content-and-effect-architecture.md`, `docs/buff_system.md`, and `docs/rng.md` were split into these current designs. Still-useful future architecture and open questions are retained in explicitly non-authoritative `Discussion` sections rather than being treated as current implementation commitments.
+
+## Discussion sections
+
+A System Design may contain a `Discussion` section to preserve technical ideas that are useful to future work but are not currently selected or settled.
+
+Discussion may include:
+
+- candidate future architecture;
+- alternatives and trade-offs;
+- scaling concerns;
+- deferred integration questions;
+- ideas preserved from earlier technical exploration.
+
+Discussion is **not** part of the current authoritative design contract. It must not be projected directly into Spec or Task, and it must not be used as a reason to add abstractions, dependencies, migrations, or compatibility work to the current implementation.
+
+To promote a discussed direction into current architecture:
+
+1. the relevant capability must be selected by the current Requirement;
+2. inspect the current implementation and affected boundaries;
+3. settle the material technical decision;
+4. move the accepted conclusion out of Discussion into the normative part of the relevant System Design;
+5. then project the affected Spec/Task.
+
+This lets the repository retain forward-looking reasoning without silently implementing speculative infrastructure.
+
+## When to create or update one
+
+Create or update a System Design when:
+
+- a capability is selected by the current Requirement; and
 - implementation/refactoring requires a material technical decision that should remain authoritative beyond a single Task.
 
-Do not create System Design documents merely to describe untouched legacy code.
+A current System Design may also describe an already accepted technical boundary that future changes are expected to preserve. This does not require retroactively creating Specs for the implementation that already exists.
 
-Small changes that fit an already-settled technical structure do not need a new System Design document. In that case, the affected code path and any still-valid technical references provide implementation context, while Spec constrains the local change without inventing new architecture.
+Small changes that fit an already-settled technical structure do not need a new System Design document. In that case, use the applicable existing System Design plus the affected code path as context for Spec projection.
 
 ## Design constraints
 
@@ -58,33 +95,33 @@ Prefer, in order:
 
 Do not build generalized plugin systems, event frameworks, factories, interfaces, or extensibility layers solely because future Game Design may eventually contain multiple worlds or gameplay types.
 
-Future replaceability is a design direction. A current abstraction requires a current implementation consumer and a concrete boundary worth preserving.
+Future replaceability is a design direction. A current abstraction requires a current implementation consumer and a concrete boundary worth preserving. Unselected alternatives belong in Discussion, not in the normative design.
 
-## Existing technical documents
+## Relationship to implementation evidence
 
-The repository already contains pre-workflow technical notes such as `docs/content-and-effect-architecture.md`, `docs/buff_system.md`, and `docs/rng.md`.
+System Design is authoritative for the technical boundary it records, but implementation remains evidence of what actually exists.
 
-Do not mass-migrate or rewrite them merely to fit the new directory structure. Treat them as historical or capability-specific context until the corresponding capability is actually changed.
+When a current System Design and implementation disagree during a new change:
 
-When a capability enters the current Requirement:
-
-1. inspect the relevant legacy document and implementation;
-2. decide which technical decisions are still valid;
-3. place only the current authoritative decisions needed for the change into `docs/system-design/<capability>.md` when a durable System Design is warranted;
-4. do not preserve obsolete architecture merely for documentation continuity.
+1. determine whether the code drifted from an intended current boundary or the document became stale;
+2. check the current Requirement and relevant Game Design;
+3. correct the earliest wrong authoritative layer before writing the downstream Spec;
+4. do not preserve an obsolete structure merely for documentation continuity.
 
 ## Relationship to Spec
 
-Spec projects the settled Requirement plus any applicable System Design into a locally executable implementation contract.
+Spec projects the settled Requirement plus any applicable normative System Design into a locally executable implementation contract.
 
-If no new System Design is warranted because the change fits an already-settled technical structure, Spec may rely on that existing structure after the affected code path has been inspected.
+If no new System Design is warranted because the change fits an already-settled technical structure, the Spec should rely on the applicable existing System Design after the affected code path has been inspected.
 
 If writing a Spec exposes an unresolved question about ownership, data architecture, dependency direction, lifecycle, interface, or another material technical choice, stop and resolve System Design first.
 
-Spec should constrain implementation; it should not become the place where architecture is invented.
+Discussion is context only. Spec should constrain implementation; it should not choose among unresolved Discussion alternatives or promote them implicitly.
 
 ## Delta changes
 
 When Requirement changes, first determine which System Designs are actually affected.
 
-When System Design changes, re-project only the dependent Specs and rebuild only their affected Tasks. Preserve unaffected documents and behavior.
+When normative System Design changes, re-project only the dependent Specs and rebuild only their affected Tasks. Preserve unaffected documents and behavior.
+
+Discussion may evolve without invalidating downstream artifacts unless a discussed conclusion is promoted into the normative design.

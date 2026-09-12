@@ -60,13 +60,16 @@ Do not silently graduate prototype shortcuts into permanent architecture.
 
 ## System Design rules
 
-- Create or update System Design only for capabilities that are entering implementation/refactoring and need material technical structure to be settled.
+- Create or update System Design for capabilities entering implementation/refactoring when material technical structure must be settled.
+- An existing technical boundary may also be adopted as a current System Design baseline after it is explicitly revalidated against the current Requirement, Game Design, and implementation. This adoption does not require retroactive Spec or Task backfill.
 - Read the affected code path end to end before deciding placement or boundaries.
 - Prefer existing Godot/project mechanisms and the smallest architecture that satisfies the current Requirement.
 - System Design owns material technical decisions: capability ownership, dependency direction, state/data model, lifecycle, interfaces/protocols, persistence/runtime choices, and integration boundaries.
 - If several technically plausible choices materially change architecture, surface the trade-off instead of silently choosing inside Spec or implementation.
 - Do not create a System Design merely to complete the document chain. If a change fits an already-settled technical structure and introduces no material architecture decision, no new System Design document is required.
-- Do not create generalized architecture merely because future Game Design might use it. Future replaceability is a design direction; current abstractions require a current consumer.
+- Do not mass-promote legacy technical notes into System Design merely because they exist. Preserve only boundaries that have been revalidated and are worth treating as current authority.
+- A System Design may contain explicitly labeled **Discussion** sections for future directions, alternatives, unresolved questions, and preserved design reasoning. Discussion is non-authoritative: Spec and Task must not implement it directly, and it must not be used as justification to add abstractions, dependencies, migrations, or compatibility work to the current implementation. A discussed direction becomes authority only after the current Requirement selects the capability and the settled technical decision is moved into the normative System Design outside Discussion.
+- Do not create generalized architecture merely because future Game Design might use it. Future replaceability is a design direction. A current abstraction requires a current consumer; speculative alternatives belong in Discussion until they are selected.
 
 ## Spec rules
 
@@ -74,6 +77,7 @@ Do not silently graduate prototype shortcuts into permanent architecture.
 - Create or update a Spec only when a capability is actually being refactored or newly developed.
 - Project the current Requirement + any applicable System Design into the smallest locally executable contract.
 - If no new System Design is warranted because the change fits an already-settled technical structure, the Spec may rely on that existing structure after the affected code path has been inspected; it must not invent new architecture merely to fill the missing layer.
+- Ignore non-authoritative System Design Discussion when projecting a Spec unless its conclusion has first been promoted into the normative design.
 - A Spec should cover only what the implementation agent needs: observable behavior, capability boundary, ownership, contracts/invariants, allowed/prohibited change surface, failure behavior, and proportionate verification.
 - Spec must not invent gameplay, Scope, or material architecture. If projection requires one, return to Game Design, Requirement, or System Design at the earliest missing layer.
 
