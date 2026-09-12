@@ -84,6 +84,8 @@ If future in-scope content grows beyond the current lightweight buff runtime int
 - **EffectHost** — runtime owner/container for active effect instances, exposing add/find/stack/remove/snapshot/listener operations;
 - **EffectSystem** — lifecycle and execution service responsible for validation, application, stacking/refresh/replace behavior, expiration, modifier collection, reaction collection, and execution tracing.
 
+A catalog could resolve static `EffectDefinition` data for an instance, but it should not own mutable `EffectInstance` state.
+
 This model is a candidate direction, not a commitment to rename or replace the current Buff classes. The smallest migration path should be chosen only when concrete consumers prove the existing boundary insufficient.
 
 ### ECS compatibility
