@@ -7,10 +7,10 @@ This repository uses a game-design-first SDD workflow for material changes and P
 The project authority chain is:
 
 1. `docs/design/` — **Game Design**: what the game is trying to be, how it should feel, which gameplay ideas and content directions are being explored or selected.
-2. `docs/requirements.md` — **Requirement**: the current version Scope extracted from Game Design; which designed capabilities are actually committed for implementation or validation now, including acceptance direction and explicit out-of-scope items when relevant.
-3. `docs/system-design/<capability>.md` — **System Design**: the software/technical structure chosen to implement an in-scope Requirement, including ownership, data flow, lifecycle, interfaces, dependency direction, and material technical decisions.
-4. `docs/specs/<capability>.md` — **Spec**: the agent-executable projection of the current Requirement and System Design for a capability being refactored or newly developed.
-5. Task — executable development work derived from Requirement + System Design + Spec; keep it in the active issue/PR unless a durable task document is specifically useful.
+2. `docs/requirements.md` — **Requirement**: the accepted implementation-facing baseline derived from Game Design, plus any current development Scope selected from that Design.
+3. `docs/system-design/<capability>.md` — **System Design**: the software/technical structure chosen when an in-scope capability requires material technical decisions, including ownership, data flow, lifecycle, interfaces, dependency direction, and integration boundaries.
+4. `docs/specs/<capability>.md` — **Spec**: the agent-executable projection of the current Requirement and any applicable System Design for a capability being refactored or newly developed.
+5. Task — executable development work derived from Requirement + applicable System Design + Spec; keep it in the active issue/PR unless a durable task document is specifically useful.
 6. Implementation — evidence of current behavior and constraints, not authority to redefine upstream Game Design, Requirement, or System Design.
 
 This order is an authority and projection relationship, not a requirement that every small discussion create every document.
@@ -24,15 +24,18 @@ This order is an authority and projection relationship, not a requirement that e
 
 ## Requirement rules
 
-- Requirement is a **version Scope**, not the complete game design and not a snapshot of everything the current code happens to support.
-- Extract Requirement only from sufficiently settled Game Design, or from a clearly stated design question that needs a prototype to settle it.
-- Requirement states what the current version must implement, preserve, or validate; the observable completion direction; and relevant exclusions.
-- A Requirement may select only part of the available Game Design. Unselected future Design remains valid Design but is not implementation scope.
+- Requirement may preserve an **Owned baseline** for already accepted behavior that future work must not break accidentally.
+- When starting new development, Requirement adds a **current version Scope** selected from sufficiently settled Game Design, or from a clearly stated design question that needs a prototype to settle it.
+- Existing code does not become Owned baseline merely because it exists; the baseline must still be consistent with current Game Design.
+- Requirement states what the project must preserve, implement, or validate; the observable completion direction; and relevant exclusions.
+- A development Scope may select only part of the available Game Design. Unselected future Design remains valid Design but is not implementation scope.
 - Do not place module ownership, interfaces, scene structure, data models, factories, service boundaries, or other software architecture decisions in Requirement.
 
-### Delivery Scope vs Validation Scope
+### Owned baseline and development Scope
 
-A Requirement may be one of two modes:
+An Owned baseline records existing, design-approved capabilities that have already been accepted by the project. Recording that baseline is not itself a request to refactor the code or backfill System Design / Spec documents.
+
+When Requirement starts new development work, that development Scope uses one of two modes:
 
 - **Delivery Scope** — implement a sufficiently settled design as a capability intended to remain in the project.
 - **Validation Scope** — build the smallest useful prototype needed to answer a concrete game-design question or test a hypothesis.
@@ -62,19 +65,21 @@ Do not silently graduate prototype shortcuts into permanent architecture.
 - Prefer existing Godot/project mechanisms and the smallest architecture that satisfies the current Requirement.
 - System Design owns material technical decisions: capability ownership, dependency direction, state/data model, lifecycle, interfaces/protocols, persistence/runtime choices, and integration boundaries.
 - If several technically plausible choices materially change architecture, surface the trade-off instead of silently choosing inside Spec or implementation.
+- Do not create a System Design merely to complete the document chain. If a change fits an already-settled technical structure and introduces no material architecture decision, no new System Design document is required.
 - Do not create generalized architecture merely because future Game Design might use it. Future replaceability is a design direction; current abstractions require a current consumer.
 
 ## Spec rules
 
 - Do **not** backfill Specs for untouched legacy code.
 - Create or update a Spec only when a capability is actually being refactored or newly developed.
-- Project the current Requirement + System Design into the smallest locally executable contract.
+- Project the current Requirement + any applicable System Design into the smallest locally executable contract.
+- If no new System Design is warranted because the change fits an already-settled technical structure, the Spec may rely on that existing structure after the affected code path has been inspected; it must not invent new architecture merely to fill the missing layer.
 - A Spec should cover only what the implementation agent needs: observable behavior, capability boundary, ownership, contracts/invariants, allowed/prohibited change surface, failure behavior, and proportionate verification.
 - Spec must not invent gameplay, Scope, or material architecture. If projection requires one, return to Game Design, Requirement, or System Design at the earliest missing layer.
 
 ## Task and implementation rules
 
-- Build Tasks from Requirement + System Design + Spec together.
+- Build Tasks from Requirement + applicable System Design + Spec together.
 - Tasks may contain concrete files, implementation order, migration steps, and test commands, but must not create hidden feature requirements or architecture decisions.
 - If implementation reveals that the change surface is larger than expected, update the earliest affected authoritative layer and revalidate only the descendants that actually depend on it.
 - Preserve unaffected Game Design, Requirement, System Design, Specs, Tasks, and behavior.
