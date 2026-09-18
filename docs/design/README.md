@@ -40,3 +40,4 @@ Do not force every brainstorming branch into a permanent document. Preserve idea
 - `array-exploration.md` — reusable principles for array/grid exploration.
 - `exploration-design.md` — first Simulated-Universe/world-bubble exploration design.
 - `character-design.md` — playable-character selection, character-owned core weapons, character growth, and attribute direction.
+- `weapon-design.md` — survivor weapon rules, summon-weapon behavior, weapon progression, and weapon-specific real-time attributes.
