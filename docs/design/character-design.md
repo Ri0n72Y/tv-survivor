@@ -174,63 +174,104 @@ Run Weapon Upgrades
 → do not consume core-weapon progression
 ```
 
-## 7. Base Attribute Direction
+## 7. Attribute Model
 
-The character attribute model continues to reference *Honkai: Star Rail* as its conceptual source, but the gameplay format is different, so attributes do not need to reproduce turn-based formulas one-to-one.
+The project references *Honkai: Star Rail* attribute vocabulary, but keeps only attributes with a concrete role in the current real-time game.
 
-Relevant source-style concepts may include attributes such as:
+The source reference is recorded separately in `docs/reference/honkai-star-rail/character-attributes.md`.
 
-- HP / survivability-related concepts, where applicable;
-- ATK;
-- DEF;
-- CRIT Rate;
-- CRIT DMG;
-- damage-type / Physical-related modifiers;
-- other character combat attributes when they remain meaningful in real-time play.
+### 7.1 Current Character / Combat Attributes
 
-However, this project's first-world combat uses **Sync as the core survival resource rather than traditional HP**, so source-game survivability concepts must be adapted rather than copied literally.
+The current minimum formal set is:
 
-## 8. Survivor-Specific Attributes
+| Attribute | Project meaning | Source relationship |
+|---|---|---|
+| **Sync Max** | Maximum synchronization / primary survival resource | Replaces the gameplay role of HP |
+| **ATK** | Base offensive stat used by applicable character/core-weapon/weapon damage formulas | Retains ATK concept |
+| **DEF** | Reduces or otherwise mitigates applicable incoming Sync damage | Retains DEF concept; exact formula TBD |
+| **CRIT Rate** | Chance for eligible damage to critically hit | Retains CRIT Rate concept |
+| **CRIT DMG** | Extra damage multiplier for eligible critical hits | Retains CRIT DMG concept |
 
-The real-time survivor-like format needs additional attributes that do not map cleanly to the source turn-based character sheet.
+This is intentionally smaller than the source game's full combat stat sheet.
 
-Current expected survivor-specific attributes include:
+### 7.2 Survivor-Specific Attributes
 
-- **Movement Speed** — character movement speed;
-- **Range Multiplier** — scales appropriate weapon/attack ranges or areas;
-- **Pickup Range** — attraction/collection radius for experience and resources;
-- **Experience Multiplier** — additional experience gain;
-- **Resource Multiplier** — additional gain from relevant run resources.
+The real-time survivor format adds attributes with direct gameplay consumers:
 
-Other likely real-time attributes should only be added when a concrete mechanic requires them.
+| Attribute | Project meaning |
+|---|---|
+| **Movement Speed** | Character movement speed in real-time combat |
+| **Range Multiplier** | Scales the range / area of attacks that declare themselves range-scalable |
+| **Pickup Range** | Collection / attraction radius for experience and collectable run resources |
+| **Experience Gain Multiplier** | Multiplies experience gained from eligible sources |
+| **Resource Gain Multiplier** | Multiplies eligible run-resource gains |
 
-Potential examples such as cooldown, projectile speed, duration, knockback, spawn-related modifiers, or reroll/economy parameters remain undecided until the related build systems are designed.
+These are project-native attributes rather than renamed source-game stats.
+
+In particular, **Movement Speed is not the source game's SPD**. Source SPD controls turn frequency; the current game has no turn order to preserve.
+
+### 7.3 Global Build Modifiers With Existing Gameplay Consumers
+
+Some modifiers are useful to the build system but do not need to be treated as character identity/base stats:
+
+- **Cooldown Multiplier** — modifies eligible weapon/ability intervals;
+- **Sync Regeneration Multiplier** — modifies eligible Sync recovery;
+- **Damage Multiplier / DMG Boost** — generic outgoing-damage modifier where a mechanic explicitly grants one.
+
+They may have a base value on every character, but conceptually they are build/combat modifiers rather than defining character base stats.
+
+This distinction prevents the character sheet from becoming a dumping ground for every possible modifier.
+
+## 8. Source Attributes Not Currently Adopted
+
+The following *Honkai: Star Rail* attributes are **not part of the current project attribute model yet**:
+
+- **SPD** — source meaning is turn frequency / Action Value; no direct real-time equivalent is needed;
+- **Effect Hit Rate** — requires probabilistic status/debuff application;
+- **Effect RES** — requires the corresponding status-resistance system;
+- **Break Effect** — requires a toughness / weakness-break system;
+- **Energy Regeneration Rate** — requires an Energy-driven skill/ultimate system;
+- **Outgoing Healing Boost** — requires a meaningful healing system;
+- **Physical / Fire / Ice / Wind / Lightning / Quantum / Imaginary DMG Boost** — requires the final damage-type system to be settled.
+
+Not adopting them now does not prohibit adding them later. They should enter the formal model only when a concrete mechanic needs them.
 
 ## 9. Attribute Design Principles
 
 ### 9.1 Preserve source identity, not source formulas
 
-The project may use familiar *Honkai: Star Rail* attribute names and character identities, but their actual mechanics should serve the real-time game.
+The project can retain recognizable concepts such as ATK, DEF, CRIT Rate and CRIT DMG without reproducing turn-based formulas.
 
-### 9.2 Character attributes and build attributes must coexist
+### 9.2 Sync replaces HP as the survival resource
 
-Base character growth gives characters persistent identity.
+Do not maintain a second conventional HP bar beside Sync for the current first-world survivor combat.
 
-Run weapons, passives, accessories, and temporary modifiers provide run-specific build variation.
+A source-style HP growth concept maps to Sync survivability only when there is a concrete design reason.
 
-Neither layer should erase the other.
+### 9.3 Do not reinterpret SPD as several unrelated stats
 
-### 9.3 Core weapon is character progression, not a normal weapon slot
+Movement speed is a project-native real-time stat.
 
-The core weapon must not be diluted into the ordinary random weapon pool.
+Weapon cooldown/attack cadence remains its own mechanic. Do not create a generic source-SPD conversion layer that simultaneously changes movement, cooldown, projectile speed, or other systems.
 
-If the player receives an ordinary weapon upgrade choice, upgrading the Trailblazer's bat is not one of the competing slots unless a future design explicitly introduces a separate core-weapon choice mechanic.
+### 9.4 Character base stats and Run modifiers are different layers
 
-### 9.4 Add survivor-only attributes only for real mechanics
+Character identity currently centers on:
 
-Do not create a large generic stat sheet in advance.
+- Sync Max;
+- ATK;
+- DEF;
+- CRIT Rate;
+- CRIT DMG;
+- character-specific core weapon.
 
-A stat becomes part of the formal model when it has a clear gameplay consumer.
+Run/build systems can modify these and add survivor-specific modifiers without making every modifier a permanent character base stat.
+
+### 9.5 Add attributes only when a mechanic consumes them
+
+Do not pre-create Effect Hit Rate, Break Effect, Energy Regeneration, elemental bonuses, knockback stats, projectile speed stats, or other generic fields in anticipation of possible future content.
+
+A new attribute enters the formal model when at least one selected gameplay system actually needs it.
 
 ## 10. Current Open Questions
 
