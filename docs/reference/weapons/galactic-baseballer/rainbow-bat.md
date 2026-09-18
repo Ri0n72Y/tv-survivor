@@ -1,94 +1,69 @@
-# 彩虹球棒 / Rainbow Bat
+# 彩虹球棒
 
-> Source type: external reference data.
+> 类型：外部参考资料。
 >
-> Source version: **《银河球棒侠传说》基础版 / Honkai: Star Rail 2.2 (2024)**.
+> 来源版本：**《银河球棒侠传说》基础版 / 《崩坏：星穹铁道》2.2（2024）**。
 >
-> This document records the source weapon for design research. It is **not** the protagonist Trailblazer's core bat and is not automatically a project weapon.
+> 主数据源：米游社《崩坏：星穹铁道》官方 WIKI。中文名称、标签、等级数值、共鸣配饰与传说武器名称均以官方口径为准。
+>
+> 本文记录原活动武器，用于本项目类幸存者武器设计参考；**不要与开拓者的角色核心武器“球棒”混淆。**
 
-## 1. Identity
+## 1. 身份
 
-- Name: 彩虹球棒 / Rainbow Bat
-- Reference ID: `rainbow_bat`
-- Source category: Random Type
-- Source tag: Focus
-- Max level: Lv.8
-- 超武进化所需被动（原活动称“共鸣配饰”）：迪斯科棒球 / Disco Baseball
-- 进化条件：彩虹球棒 Lv.8 + 迪斯科棒球 Lv.1+
-- 传说形态：Morningstar Bat
-- Source edition: original/base Galactic Baseballer, not Demon King edition
+- 名称：**彩虹球棒**
+- 参考 ID：`rainbow_bat`
+- 标签：**随机、集中**
+- 最大等级：Lv.8
+- 超武进化所需被动（原活动称“共鸣配饰”）：**迪斯科棒球**
+- 进化条件：**彩虹球棒 Lv.8 + 迪斯科棒球 Lv.1+**
+- 传说武器：**晨星球棒**
+- 来源版本：基础版，不使用《魔王篇》重平衡数据
 
-## 2. Core Behavior
+## 2. 核心行为
 
-Source behavior:
+基础版行为：
 
-- triggers after an allied character attacks enemies;
-- chooses one eligible target from enemies hit by that attack;
-- performs multiple additional hits against that target;
-- each hit deals a random damage type;
-- has an additional damage bonus against Elite/Boss targets;
-- it is an event-triggered weapon, not an independent cooldown/turn weapon.
+- 我方角色完成攻击后触发；
+- 从本次攻击命中的敌方目标中随机选择 1 个目标；
+- 对该目标造成多段追加伤害；
+- 每段伤害的属性随机；
+- 对精英与首领目标有额外伤害加成；
+- 属于**角色攻击事件触发型武器**，自身没有独立行动速度。
 
-Behavior model:
+行为模型：
 
 ```text
-character attack resolves
-        ↓
-collect targets hit by that attack
-        ↓
-choose one eligible target
-        ↓
-Rainbow Bat triggers
-        ↓
-perform N random-type hits
+角色攻击结算
+    ↓
+取得本次被攻击的敌方目标
+    ↓
+随机选择其中 1 个
+    ↓
+彩虹球棒触发
+    ↓
+进行多段随机属性追加攻击
 ```
 
-## 3. Level Progression
+## 3. 等级成长
 
-| Level | Hits | Damage per hit | Elite/Boss bonus | Change |
+| 等级 | 攻击次数 | 单次伤害倍率 | 对精英/首领额外伤害 | 本级变化 |
 |---:|---:|---:|---:|---|
-| Lv1 | 4 | 100% base DMG | +30% | Base behavior |
-| Lv2 | 4 | 120% | +30% | Damage increase |
-| Lv3 | 4 | 150% | +30% | Damage increase |
-| Lv4 | 6 | 150% | +30% | Hit count 4 → 6 |
-| Lv5 | 6 | 180% | +30% | Damage increase |
-| Lv6 | 6 | 210% | +30% | Damage increase |
-| Lv7 | 6 | 240% | +30% | Damage increase |
-| Lv8 | 6 | 300% | +30% | Damage increase |
+| Lv1 | 4 | 100% 基础伤害 | +30% | 建立基础行为 |
+| Lv2 | 4 | 120% | +30% | 伤害提高 |
+| Lv3 | 4 | 150% | +30% | 伤害提高 |
+| Lv4 | 6 | 150% | +30% | 攻击次数 4 → 6 |
+| Lv5 | 6 | 180% | +30% | 伤害提高 |
+| Lv6 | 6 | 210% | +30% | 伤害提高 |
+| Lv7 | 6 | 240% | +30% | 伤害提高 |
+| Lv8 | 6 | 300% | +30% | 伤害提高 |
 
-The important progression breakpoint is Lv4: it changes attack structure instead of only scaling a number.
+Lv4 是主要行为质变点：从 4 段提高到 6 段，而不是单纯增加倍率。
 
-## 4. 超武进化
+## 4. 超武进化所需被动：迪斯科棒球
 
-基础版《银河球棒侠传说》的通用进化规则是：**Lv.8 武器 + Lv.1 以上对应共鸣配饰 → 传说武器**。
+**迪斯科棒球**既是彩虹球棒的进化条件，也是独立构筑被动。
 
-彩虹球棒对应：
-
-```text
-彩虹球棒 Lv.8
-+
-迪斯科棒球 Lv.1+
-↓
-Morningstar Bat
-```
-
-在我们后续整理武器时，将“共鸣配饰”统一记录为 **超武进化所需被动**，同时保留原活动术语用于溯源。
-
-Recorded legendary behavior:
-
-- keeps the same basic trigger;
-- keeps random damage types;
-- attacks 9 times;
-- each hit deals 600% base DMG;
-- keeps the +30% Elite/Boss damage bonus.
-
-This is primarily an amplification evolution rather than a replacement of the core behavior.
-
-## 5. 超武进化被动：迪斯科棒球
-
-**迪斯科棒球 / Disco Baseball** 是彩虹球棒对应的超武进化被动，在原活动中属于“配饰 / 共鸣配饰”。
-
-基础版效果：本局中，我方角色与武器每造成过一种不同属性的伤害，就提高我方角色与武器造成的伤害。
+基础版效果：本局中每出现一种不同伤害属性，提高我方角色与武器造成的伤害。
 
 | 等级 | 每种已出现伤害属性提供的增伤 |
 |---:|---:|
@@ -97,51 +72,100 @@ This is primarily an amplification evolution rather than a replacement of the co
 | Lv3 | +6% |
 | Lv4 | +7% |
 
-因此它同时承担两种职责：
+因此它承担两种职责：
 
-1. **进化钥匙**：至少 Lv.1 时允许 Lv.8 彩虹球棒进化为传说武器；
-2. **独立构筑被动**：即使不考虑进化，它本身也奖励多属性伤害构筑。
+1. **进化钥匙**：Lv.1+ 时允许 Lv.8 彩虹球棒进化；
+2. **多属性构筑被动**：属性种类越丰富，整体增伤越高。
 
-它与彩虹球棒的“随机属性伤害”天然协同，但不是只对彩虹球棒生效。
+## 5. 传说武器：晨星球棒
 
-## 6. Implementation Primitive Observed
+进化：
 
-The useful implementation lesson for this project is not the exact source weapon, but the behavior primitive:
+```text
+彩虹球棒 Lv.8
++
+迪斯科棒球 Lv.1+
+↓
+晨星球棒
+```
 
-**combat-event-triggered weapon**
+基础版传说效果：
 
-Unlike the current prototype weapons that mostly act from their own timers, this source weapon requires an attack-resolution event carrying information about:
+- 保留“角色攻击后触发”的机制；
+- 保留随机伤害属性；
+- 攻击次数提高至 **9 次**；
+- 每次造成 **600% 基础伤害**；
+- 对精英与首领仍有 **+30%** 额外伤害；
+- 标签仍为 **随机、集中**。
 
-- event source;
-- event type;
-- targets hit;
-- whether the event is allowed to trigger weapon effects.
+进化方向主要是把原有“单目标、多段、追加攻击”推到更高强度，而不是更换行为模型。
 
-Potential event categories may later need to distinguish character attacks from weapon damage, enemy damage, and environmental damage so weapon effects do not recurse unintentionally.
+## 6. 对本项目的设计参考价值
 
-This is an implementation observation only; the exact combat-event architecture belongs to System Design when a current project weapon actually requires it.
+### 6.1 追加攻击型武器
 
-## 7. Unknown / Not Yet Captured
+彩虹球棒代表：
 
-The current text dataset does not reliably capture:
+**战斗事件触发型武器**
 
-- exact hit-to-hit visual timing;
-- exact animation;
-- sound effects;
-- detailed impact VFX;
-- exact presentation of random damage types.
+它不是自己计时攻击，而是监听角色攻击完成事件。
 
-These should be filled from base-version gameplay footage if presentation fidelity becomes relevant.
+### 6.2 更适合中等数量、中等耐久敌人
 
-## 8. Project Use
+如果敌人一击即死，追加攻击很容易溢出或失去存在感。
 
-This weapon is currently a **reference sample** for:
+在本项目当前“较少量、中等耐久敌人 + 生命值/韧性值双条”的方向下，它更容易形成：
 
-- trigger-based weapons;
-- multi-hit single-target weapons;
-- non-linear level progression;
-- Elite/Boss specialization;
-- 普通武器 → 超武进化被动（共鸣配饰）→ 传说武器的进化配方；
-- 进化被动自身仍具有独立构筑价值，而不是纯粹钥匙。
+```text
+角色主攻击
+    ↓
+造成伤害 / 削韧
+    ↓
+彩虹球棒追加多段伤害
+    ↓
+加速压低生命值或完成击杀
+```
 
-Do not confuse it with the Trailblazer's core weapon, which is a separate project-specific bat design.
+### 6.3 非线性升级
+
+Lv4 修改攻击次数，说明武器升级不应只有线性数值增长。
+
+## 7. 实现层观察
+
+如果未来正式实现同类武器，需要战斗事件至少能表达：
+
+- 事件来源；
+- 是否为角色本体攻击；
+- 本次攻击命中的目标集合；
+- 是否允许触发武器效果。
+
+具体事件结构属于后续 System Design，不在参考资料阶段提前设计。
+
+## 8. 当前未记录的表现信息
+
+当前不补猜：
+
+- 每段攻击之间的视觉间隔；
+- 具体动画；
+- 音效；
+- 随机属性的具体视觉反馈；
+- 命中特效。
+
+需要时再从基础版实机录像补充。
+
+## 9. 来源
+
+主来源：
+
+- 米游社《崩坏：星穹铁道》官方 WIKI：
+  https://bbs.mihoyo.com/sr/wiki/content/2989/detail?bbs_presentation_style=no_header
+
+官方社区中的武器/配饰对应图可直接确认：
+
+- 彩虹球棒；
+- 迪斯科棒球；
+- 晨星球棒；
+- “随机、集中”标签；
+- 8级武器 + 1级配饰 → 传说武器的基础规则。
+
+辅助来源仅用于交叉核对，不覆盖官方口径。
