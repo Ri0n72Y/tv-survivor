@@ -32,3 +32,11 @@ Do not constrain Game Design to match accidental legacy code structure. Implemen
 Game Design may move from open exploration toward settled decisions over time. Keep current conclusions readable and remove stale contradictions when a direction is replaced.
 
 Do not force every brainstorming branch into a permanent document. Preserve ideas that remain useful to the project; discard noise.
+
+
+## Current design documents
+
+- `game-concept.md` — project-level concept, world/run structure, and relationship between exploration and local gameplay.
+- `array-exploration.md` — reusable principles for array/grid exploration.
+- `exploration-design.md` — first Simulated-Universe/world-bubble exploration design.
+- `character-design.md` — playable-character selection, character-owned core weapons, character growth, and attribute direction.
