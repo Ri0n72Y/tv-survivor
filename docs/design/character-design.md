@@ -115,9 +115,12 @@ Reference Weapon
 
 Current confirmed behavior:
 
+- gameplay tag: **范围**;
 - close-range weapon;
 - attacks **sideways / laterally** relative to the character;
 - covers a short-range area rather than a single point;
+- current base attack distance / spatial reach reference: **2 unit**;
+- because it has the `范围` tag, applicable range-tag and attack-range bonuses can modify its coverage;
 - deals **Physical damage**;
 - knocks hit targets back;
 - belongs permanently to the Trailblazer;
