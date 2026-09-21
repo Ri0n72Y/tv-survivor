@@ -42,3 +42,4 @@ Do not force every brainstorming branch into a permanent document. Preserve idea
 - `character-design.md` — playable-character selection, character-owned core weapons, and character growth.
 - `attributes.md` — canonical gameplay attribute definitions, purposes, boundaries, and current status.
 - `weapon-design.md` — survivor weapon rules, summon-weapon behavior, weapon progression, and weapon-specific real-time attributes.
+- `passive-accessories.md` — standalone passive accessories that do not participate in weapon evolution.
