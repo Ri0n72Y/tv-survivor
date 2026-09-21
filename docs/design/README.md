@@ -43,3 +43,4 @@ Do not force every brainstorming branch into a permanent document. Preserve idea
 - `attributes.md` — canonical gameplay attribute definitions, purposes, boundaries, and current status.
 - `weapon-design.md` — survivor weapon rules, summon-weapon behavior, weapon progression, and weapon-specific real-time attributes.
 - `passive-accessories.md` — standalone passive accessories that do not participate in weapon evolution.
+- `resonance-accessories.md` — the 13 weapon resonance accessories, their project mappings, and deferred status where applicable.
