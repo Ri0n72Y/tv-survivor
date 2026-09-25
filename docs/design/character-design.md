@@ -116,10 +116,13 @@ Reference Weapon
 Current confirmed behavior:
 
 - gameplay tag: **范围**;
+- base weapon speed: **100**;
+- effective weapon speed is exactly the Trailblazer's current **速度** value;
+- follows the project-wide attack-behavior gate: a new attack cannot begin before the previous complete attack finishes its final recovery;
 - close-range weapon;
 - attacks **sideways / laterally** relative to the character;
 - covers a short-range area rather than a single point;
-- current base attack distance / spatial reach reference: **2 unit**;
+- current base attack distance / spatial reach reference: **2**;
 - because it has the `范围` tag, applicable range-tag and attack-range bonuses can modify its coverage;
 - deals **Physical damage**;
 - knocks hit targets back;
@@ -146,7 +149,6 @@ Open details:
 - automatic attack or player-input relationship;
 - left/right or broader lateral selection rule;
 - exact attack arc / rectangle / swept shape;
-- attack frequency;
 - damage formula;
 - knockback distance / force;
 - whether knockback resistance exists;
@@ -200,6 +202,6 @@ Run Weapon Upgrades
 - 角色等级是局内成长、局外成长还是混合；
 - 核心武器熟练度是局内、永久还是混合；
 - 核心武器熟练度阈值与成长内容；
-- 开拓者球棒攻击频率、范围形状和具体击退规则；
+- 开拓者球棒范围形状和具体击退规则；
 - 开拓者的初始属性与等级成长；
 - 后续角色之间的基础属性差异。
